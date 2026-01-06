@@ -1,0 +1,47 @@
+{{if .Tasks}}
+<ul class="task-list">
+    {{range .Tasks}}
+    <li class="task-item {{if .IsDone}}done{{end}} {{if .IsOverdue}}overdue{{end}}" data-id="{{.ID}}">
+        <div class="task-checkbox">
+            {{if .IsDone}}
+            <button class="btn-status done" 
+                hx-post="/tasks/{{.ID}}/undo?project={{$.CurrentProject}}"
+                hx-swap="none"
+                title="Mark as open">✓</button>
+            {{else}}
+            <button class="btn-status" 
+                hx-post="/tasks/{{.ID}}/done?project={{$.CurrentProject}}"
+                hx-swap="none"
+                title="Mark as done">○</button>
+            {{end}}
+        </div>
+        <div class="task-content">
+            <span class="task-title">{{.Title}}</span>
+            {{if .Tags}}
+            <div class="task-tags">
+                {{range .Tags}}
+                <span class="tag">{{.}}</span>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+        {{if .DueAt}}
+        <div class="task-due {{if .IsOverdue}}overdue{{end}}">
+            {{formatShort .DueAt}}
+        </div>
+        {{end}}
+        <div class="task-actions">
+            <button class="btn-delete" 
+                hx-post="/tasks/{{.ID}}/delete?project={{$.CurrentProject}}"
+                hx-swap="none"
+                hx-confirm="Delete this task?"
+                title="Delete">×</button>
+        </div>
+    </li>
+    {{end}}
+</ul>
+{{else}}
+<div class="empty-state">
+    <p>No tasks{{if not .ShowDone}} (showing open only){{end}}</p>
+</div>
+{{end}}
