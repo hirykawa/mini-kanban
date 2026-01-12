@@ -2,6 +2,7 @@
 package i18n
 
 import (
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -85,10 +86,13 @@ func GetLanguage() string {
 	return currentLang
 }
 
-// T returns the translated string for the given key.
+// T returns the translated string for the given key using the global current language (for CLI).
 func T(key string) string {
-	lang := GetLanguage()
+	return Translate(GetLanguage(), key)
+}
 
+// Translate returns the translated string for the given language and key.
+func Translate(lang, key string) string {
 	var msgs map[string]string
 	switch lang {
 	case LangJapanese:
@@ -108,4 +112,58 @@ func T(key string) string {
 
 	// Return key itself as last resort
 	return key
+}
+
+// DetectLanguageFromRequest detects the preferred language from the HTTP request.
+func DetectLanguageFromRequest(r *http.Request) string {
+	// 1. Check query param ?lang=xx
+	if lang := r.URL.Query().Get("lang"); lang != "" {
+		return normalizeLang(lang)
+	}
+
+	// 2. Check cookie if we had one (skipping for now as per plan, keeping it simple)
+
+	// 3. Check Accept-Language header
+	accept := r.Header.Get("Accept-Language")
+	if accept != "" {
+		// Simple parser: take the first one or split by comma
+		// "en-US,en;q=0.9,ja;q=0.8"
+		parts := strings.Split(accept, ",")
+		for _, part := range parts {
+			// clean up q values "en;q=0.9" -> "en"
+			if idx := strings.Index(part, ";"); idx != -1 {
+				part = part[:idx]
+			}
+			part = strings.TrimSpace(part)
+			part = strings.TrimSpace(part)
+			// check if it's a supported language (normalizeLang returns DefaultLang if not supported, 
+			// but we want to know if it *matched* a supported one)
+			
+			// Re-use logic: if normalizeLang returns a supported lang that isn't just a fallback
+			// simpler: just check against known supported languages directly or trust normalizeLang's logic?
+			// normalizeLang returns DefaultLang if it doesn't match.
+			// So if we have "fr", normalizeLang("fr") -> "en". We shouldn't necessarily stop there if "ja" is next.
+			// But normalizeLang implementation:
+			// case LangJapanese: return LangJapanese
+			// case LangEnglish: return LangEnglish
+			// default: return DefaultLang
+			
+			// So we need to check if the input maps to a supported language distinctively.
+			// Let's copy logic from normalizeLang but return empty if not supported
+			langCode := strings.ToLower(part)
+			// Remove region
+			if idx := strings.Index(langCode, "-"); idx != -1 {
+				langCode = langCode[:idx]
+			}
+			
+			if langCode == LangJapanese || langCode == "jp" {
+				return LangJapanese
+			}
+			if langCode == LangEnglish {
+				return LangEnglish
+			}
+		}
+	}
+
+	return DefaultLang 
 }

@@ -44,9 +44,9 @@ UPDATE tasks SET
 WHERE id = ? AND project_id = ?
 RETURNING *;
 
--- name: MarkTaskOpen :one
+-- name: MarkTaskTodo :one
 UPDATE tasks SET
-    status = 'open',
+    status = 'todo',
     done_at = NULL,
     updated_at = unixepoch()
 WHERE id = ? AND project_id = ?
@@ -61,14 +61,21 @@ FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ?
 ORDER BY
-    CASE WHEN t.status = 'open' THEN 0 ELSE 1 END,
+    CASE t.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'done' THEN 2 END,
     t.created_at DESC;
 
--- name: ListTasksOpen :many
+-- name: ListTasksTodo :many
 SELECT t.*, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
-WHERE t.project_id = ? AND t.status = 'open'
+WHERE t.project_id = ? AND t.status = 'todo'
+ORDER BY t.created_at DESC;
+
+-- name: ListTasksDoing :many
+SELECT t.*, p.name as project_name
+FROM tasks t
+JOIN projects p ON t.project_id = p.id
+WHERE t.project_id = ? AND t.status = 'doing'
 ORDER BY t.created_at DESC;
 
 -- name: ListTasksDone :many
@@ -139,5 +146,29 @@ ORDER BY t.due_at ASC;
 SELECT t.*, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
-WHERE t.project_id = ? AND t.status = 'open' AND t.due_at < unixepoch()
+WHERE t.project_id = ? AND t.status = 'todo' AND t.due_at < unixepoch()
 ORDER BY t.due_at ASC;
+
+-- name: ListTasksByStatus :many
+SELECT t.*, p.name as project_name
+FROM tasks t
+JOIN projects p ON t.project_id = p.id
+WHERE t.project_id = ? AND t.status = ?
+ORDER BY t.created_at DESC;
+
+-- name: UpdateTaskStatus :one
+UPDATE tasks SET
+    status = ?,
+    done_at = CASE WHEN ? = 'done' THEN unixepoch() ELSE NULL END,
+    updated_at = unixepoch()
+WHERE id = ? AND project_id = ?
+RETURNING *;
+
+-- name: ListAllTasksGrouped :many
+SELECT t.*, p.name as project_name
+FROM tasks t
+JOIN projects p ON t.project_id = p.id
+WHERE t.project_id = ?
+ORDER BY
+    CASE t.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'done' THEN 2 END,
+    t.created_at DESC;

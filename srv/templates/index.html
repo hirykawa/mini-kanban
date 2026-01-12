@@ -3,22 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mini-kanban</title>
+    <title>{{call .T "web.page.title"}}</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
 <body>
-    <div class="container">
+    <div class="container kanban-container">
         <header>
-            <h1>mini-kanban</h1>
+            <h1>{{call .T "web.page.title"}}</h1>
             <div class="project-selector">
-                <label for="project">Project:</label>
+                <label for="project">{{call .T "web.project"}}</label>
                 <select id="project" name="project" 
-                    hx-get="/partials/list" 
+                    hx-get="/partials/kanban" 
                     hx-trigger="change"
-                    hx-target="#task-list"
-                    hx-swap="innerHTML"
-                    hx-include="[name='q'], [name='done']">
+                    hx-target="#kanban-board"
+                    hx-swap="innerHTML">
                     {{range .Projects}}
                     <option value="{{.Name}}" {{if eq .Name $.CurrentProject}}selected{{end}}>{{.Name}}</option>
                     {{end}}
@@ -31,43 +30,30 @@
             <form class="add-form" hx-post="/tasks" hx-swap="none" hx-on::after-request="this.reset()">
                 <input type="hidden" name="project" value="{{.CurrentProject}}">
                 <div class="form-row">
-                    <input type="text" name="title" placeholder="New task..." required class="input-title">
-                    <input type="text" name="tags" placeholder="Tags (comma separated)" class="input-tags">
-                    <input type="date" name="due" class="input-due">
-                    <button type="submit" class="btn-add">Add</button>
+                    <input type="text" name="title" placeholder="{{call .T "web.add.title"}}" required class="input-title">
+                    <input type="text" name="tags" placeholder="{{call .T "web.add.tags"}}" class="input-tags">
+                    <select name="due" class="input-due">
+                        <option value="">{{call .T "web.due.none"}}</option>
+                        {{range .DuePresets}}
+                        <option value="{{.Value}}" {{if eq .Label (call $.T "web.due.today")}}selected{{end}}>{{.Label}}</option>
+                        {{end}}
+                    </select>
+                    <button type="submit" class="btn-add">{{call .T "web.add.btn"}}</button>
                 </div>
             </form>
 
-            <!-- Search and Filter -->
-            <div class="search-bar">
-                <input type="text" name="q" placeholder="Search tasks..." value="{{.Query}}"
-                    hx-get="/partials/list"
-                    hx-trigger="keyup changed delay:300ms"
-                    hx-target="#task-list"
-                    hx-swap="innerHTML"
-                    hx-include="[name='project'], [name='done']">
-                <label class="toggle-done">
-                    <input type="checkbox" name="done" value="1" {{if .ShowDone}}checked{{end}}
-                        hx-get="/partials/list"
-                        hx-trigger="change"
-                        hx-target="#task-list"
-                        hx-swap="innerHTML"
-                        hx-include="[name='project'], [name='q']">
-                    Show completed
-                </label>
-            </div>
-
-            <!-- Task List -->
-            <div id="task-list" 
-                hx-get="/partials/list?project={{.CurrentProject}}"
+            <!-- Kanban Board -->
+            <div id="kanban-board" class="kanban-board"
+                hx-get="/partials/kanban?project={{.CurrentProject}}"
                 hx-trigger="taskCreated from:body, taskUpdated from:body, taskDeleted from:body">
-                {{template "task_list.html" .}}
+                {{template "kanban.html" .}}
             </div>
         </main>
 
         <footer>
-            <p>mini-kanban • Lightweight task management</p>
+            <p>{{call .T "web.footer"}}</p>
         </footer>
     </div>
+    <script src="/static/kanban.js"></script>
 </body>
 </html>

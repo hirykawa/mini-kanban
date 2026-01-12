@@ -823,3 +823,147 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 	)
 	return i, err
 }
+
+// Kanban Status Queries
+
+const listTasksTodo = `-- name: ListTasksTodo :many
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+FROM tasks t
+JOIN projects p ON t.project_id = p.id
+WHERE t.project_id = ? AND t.status = 'todo'
+ORDER BY t.created_at DESC
+`
+
+type ListTasksTodoRow struct {
+	ID          int64  `json:"id"`
+	ProjectID   int64  `json:"project_id"`
+	Title       string `json:"title"`
+	Body        string `json:"body"`
+	Status      string `json:"status"`
+	DueAt       *int64 `json:"due_at"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+	DoneAt      *int64 `json:"done_at"`
+	ProjectName string `json:"project_name"`
+}
+
+func (q *Queries) ListTasksTodo(ctx context.Context, projectID int64) ([]ListTasksTodoRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTasksTodo, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTasksTodoRow{}
+	for rows.Next() {
+		var i ListTasksTodoRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Body,
+			&i.Status,
+			&i.DueAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DoneAt,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTasksDoing = `-- name: ListTasksDoing :many
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+FROM tasks t
+JOIN projects p ON t.project_id = p.id
+WHERE t.project_id = ? AND t.status = 'doing'
+ORDER BY t.created_at DESC
+`
+
+type ListTasksDoingRow struct {
+	ID          int64  `json:"id"`
+	ProjectID   int64  `json:"project_id"`
+	Title       string `json:"title"`
+	Body        string `json:"body"`
+	Status      string `json:"status"`
+	DueAt       *int64 `json:"due_at"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+	DoneAt      *int64 `json:"done_at"`
+	ProjectName string `json:"project_name"`
+}
+
+func (q *Queries) ListTasksDoing(ctx context.Context, projectID int64) ([]ListTasksDoingRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTasksDoing, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTasksDoingRow{}
+	for rows.Next() {
+		var i ListTasksDoingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Title,
+			&i.Body,
+			&i.Status,
+			&i.DueAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DoneAt,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateTaskStatus = `-- name: UpdateTaskStatus :one
+UPDATE tasks SET
+    status = ?,
+    done_at = CASE WHEN ? = 'done' THEN unixepoch() ELSE NULL END,
+    updated_at = unixepoch()
+WHERE id = ? AND project_id = ?
+RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at
+`
+
+type UpdateTaskStatusParams struct {
+	Status    string `json:"status"`
+	ID        int64  `json:"id"`
+	ProjectID int64  `json:"project_id"`
+}
+
+func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) (Task, error) {
+	row := q.db.QueryRowContext(ctx, updateTaskStatus, arg.Status, arg.Status, arg.ID, arg.ProjectID)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Title,
+		&i.Body,
+		&i.Status,
+		&i.DueAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DoneAt,
+	)
+	return i, err
+}

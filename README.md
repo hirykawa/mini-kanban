@@ -10,7 +10,20 @@
 - 📁 プロジェクト別のタスク管理
 - 💾 SQLite によるオフライン対応のローカルストレージ
 
-## インストール・起動
+## 初期設定 / はじめに
+ 
+ 初めて使用する場合は、`init` コマンドを実行して環境を初期化することをおすすめします。
+ 
+ ```bash
+ # 設定ファイルとデータベースの準備
+ mini-kanban init
+ ```
+ 
+ これにより、以下の処理が行われます:
+ - 設定ファイルの作成 (`~/.config/mini-kanban/config.toml` など)
+ - データベースディレクトリの準備
+ 
+ ## インストール・起動
 
 ### ビルド
 
@@ -22,13 +35,13 @@ make build
 
 ```bash
 # CLI として使用
-go run ./cmd/mini-kanban [コマンド]
+go run ./cmd [コマンド]
 
 # 例: タスク一覧
-go run ./cmd/mini-kanban ls
+go run ./cmd ls
 
 # 例: Web UI を起動
-go run ./cmd/mini-kanban web
+go run ./cmd web
 ```
 
 ### ローカルで起動

@@ -3,6 +3,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -89,6 +90,22 @@ func GlobalConfigPath() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "mini-kanban", "config.toml")
+}
+
+// GenerateDefaultProjectConfig returns a template .mini-kanban.toml content.
+func GenerateDefaultProjectConfig(projectName string) string {
+	if projectName == "" {
+		projectName = "my-project"
+	}
+	return fmt.Sprintf(`# mini-kanban project configuration
+
+[project]
+name = "%s"
+
+[ai]
+context = ""
+context_file = ""
+`, projectName)
 }
 
 // DBPath returns the path to the database file.

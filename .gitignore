@@ -4,3 +4,5 @@ db.sqlite3-*
 mini-kanban
 
 .env
+
+.mini-kanban.toml

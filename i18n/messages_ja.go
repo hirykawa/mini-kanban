@@ -8,6 +8,11 @@ var messagesJA = map[string]string{
 	"root.flag.project": "プロジェクト名（環境変数/設定を上書き）",
 	"root.flag.lang":    "ヘルプの言語 (en, ja)",
 
+	// init command
+	"init.use":   "init",
+	"init.short": "設定とデータベースを初期化",
+	"init.long":  "mini-kanbanの設定ファイルとデータベースを初期化して利用を開始します。",
+
 	// add command
 	"add.use":       "add <タイトル>",
 	"add.short":     "新しいタスクを追加",
@@ -91,4 +96,32 @@ var messagesJA = map[string]string{
 	"web.long":      "mini-kanban WebインターフェースのローカルWebサーバーを起動します。",
 	"web.flag.port": "待ち受けポート",
 	"web.flag.host": "バインドするホスト",
+
+	// Web Interface
+	"web.project":      "プロジェクト:",
+	"web.search.ph":    "タスクを検索...",
+	"web.show_done":    "完了済みを表示",
+	"web.add.title":    "新しいタスク...",
+	"web.add.tags":     "タグ（カンマ区切り）",
+	"web.add.btn":      "追加",
+	"web.list.empty":   "タスクが見つかりません。",
+	"web.status.open":  "未完了",
+	"web.status.done":  "完了",
+	"web.overdue":      "期限切れ",
+	"web.created":      "作成日",
+	"web.footer":       "mini-kanban • 軽量タスク管理",
+	"web.page.title":   "mini-kanban",
+
+	// Kanban columns
+	"web.kanban.todo":  "Todo",
+	"web.kanban.doing": "作業中",
+	"web.kanban.done":  "完了",
+
+	// Due date presets
+	"web.due.today":       "今日まで",
+	"web.due.tomorrow":    "明日中",
+	"web.due.this_week":   "今週中",
+	"web.due.this_month":  "今月まで",
+	"web.due.next_month":  "来月まで",
+	"web.due.none":        "期限なし",
 }

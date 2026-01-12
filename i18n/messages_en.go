@@ -8,6 +8,11 @@ var messagesEN = map[string]string{
 	"root.flag.project": "project name (overrides env/config)",
 	"root.flag.lang":    "language for help (en, ja)",
 
+	// init command
+	"init.use":   "init",
+	"init.short": "Initialize configuration and database",
+	"init.long":  "Initialize the mini-kanban configuration file and database to get started.",
+
 	// add command
 	"add.use":       "add <title>",
 	"add.short":     "Add a new task",
@@ -91,4 +96,32 @@ var messagesEN = map[string]string{
 	"web.long":      "Start the local web server for the mini-kanban web interface.",
 	"web.flag.port": "port to listen on",
 	"web.flag.host": "host to bind to",
+
+	// Web Interface
+	"web.project":      "Project:",
+	"web.search.ph":    "Search tasks...",
+	"web.show_done":    "Show completed",
+	"web.add.title":    "New task...",
+	"web.add.tags":     "Tags (comma separated)",
+	"web.add.btn":      "Add",
+	"web.list.empty":   "No tasks found.",
+	"web.status.open":  "Open",
+	"web.status.done":  "Done",
+	"web.overdue":      "Overdue",
+	"web.created":      "Created",
+	"web.footer":       "mini-kanban • Lightweight task management",
+	"web.page.title":   "mini-kanban",
+
+	// Kanban columns
+	"web.kanban.todo":  "Todo",
+	"web.kanban.doing": "Doing",
+	"web.kanban.done":  "Done",
+
+	// Due date presets
+	"web.due.today":       "Today",
+	"web.due.tomorrow":    "Tomorrow",
+	"web.due.this_week":   "This week",
+	"web.due.this_month":  "This month",
+	"web.due.next_month":  "Next month",
+	"web.due.none":        "No due date",
 }

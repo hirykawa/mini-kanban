@@ -42,6 +42,6 @@
 </ul>
 {{else}}
 <div class="empty-state">
-    <p>No tasks{{if not .ShowDone}} (showing open only){{end}}</p>
+    <p>{{call .T "web.list.empty"}}</p>
 </div>
 {{end}}

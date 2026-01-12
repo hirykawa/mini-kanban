@@ -49,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(dbCmd)
 	rootCmd.AddCommand(webCmd)
+	rootCmd.AddCommand(initCmd)
 }
 
 // initI18n initializes the i18n package based on --lang flag or environment.
@@ -67,7 +68,13 @@ func initI18n() {
 func updateCommandHelp() {
 	// Root command
 	rootCmd.Short = i18n.T("root.short")
+	rootCmd.Short = i18n.T("root.short")
 	rootCmd.Long = i18n.T("root.long")
+
+	// init command
+	initCmd.Use = i18n.T("init.use")
+	initCmd.Short = i18n.T("init.short")
+	initCmd.Long = i18n.T("init.long")
 
 	// add command
 	addCmd.Use = i18n.T("add.use")

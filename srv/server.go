@@ -17,6 +17,7 @@ import (
 
 	"mini-kanban/db"
 	"mini-kanban/db/dbgen"
+	"mini-kanban/i18n"
 	"mini-kanban/search"
 )
 
@@ -71,6 +72,7 @@ func (s *Server) Serve(addr string) error {
 	// Pages
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("GET /partials/list", s.handlePartialList)
+	mux.HandleFunc("GET /partials/kanban", s.handlePartialKanban)
 
 	// API
 	mux.HandleFunc("POST /tasks", s.handleCreateTask)
@@ -78,6 +80,7 @@ func (s *Server) Serve(addr string) error {
 	mux.HandleFunc("POST /tasks/{id}/undo", s.handleUndo)
 	mux.HandleFunc("POST /tasks/{id}/update", s.handleUpdate)
 	mux.HandleFunc("POST /tasks/{id}/delete", s.handleDelete)
+	mux.HandleFunc("POST /tasks/{id}/status", s.handleUpdateStatus)
 
 	// Static files
 	staticSub, _ := fs.Sub(staticFS, "static")
@@ -91,10 +94,22 @@ type pageData struct {
 	Projects       []dbgen.Project
 	CurrentProject string
 	Tasks          []taskView
+	// Kanban columns
+	TodoTasks      []taskView
+	DoingTasks     []taskView
+	DoneTasks      []taskView
 	Query          string
 	ShowDone       bool
 	Tags           []string
+	DuePresets     []duePreset
+	T              func(string) string
 }
+
+type duePreset struct {
+	Value string
+	Label string
+}
+
 
 type taskView struct {
 	ID        int64
@@ -114,7 +129,8 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		project = s.DefaultProject
 	}
 
-	data, err := s.buildPageData(r.Context(), project, r.URL.Query())
+	lang := i18n.DetectLanguageFromRequest(r)
+	data, err := s.buildKanbanData(r.Context(), project, lang)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -132,7 +148,8 @@ func (s *Server) handlePartialList(w http.ResponseWriter, r *http.Request) {
 		project = s.DefaultProject
 	}
 
-	data, err := s.buildPageData(r.Context(), project, r.URL.Query())
+	lang := i18n.DetectLanguageFromRequest(r)
+	data, err := s.buildPageData(r.Context(), project, r.URL.Query(), lang)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -144,7 +161,7 @@ func (s *Server) handlePartialList(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) buildPageData(ctx context.Context, projectName string, query map[string][]string) (*pageData, error) {
+func (s *Server) buildPageData(ctx context.Context, projectName string, query map[string][]string, lang string) (*pageData, error) {
 	q := dbgen.New(s.DB)
 
 	// Get all projects
@@ -258,7 +275,7 @@ func (s *Server) buildPageData(ctx context.Context, projectName string, query ma
 			CreatedAt: t.CreatedAt,
 			IsDone:    t.Status == "done",
 		}
-		if t.DueAt != nil && t.Status == "open" {
+		if t.DueAt != nil && (t.Status == "todo" || t.Status == "doing") {
 			tv.IsOverdue = *t.DueAt < time.Now().Unix()
 		}
 		taskViews = append(taskViews, tv)
@@ -281,6 +298,9 @@ func (s *Server) buildPageData(ctx context.Context, projectName string, query ma
 		Query:          searchQuery,
 		ShowDone:       showDone,
 		Tags:           tagNames,
+		T: func(key string) string {
+			return i18n.Translate(lang, key)
+		},
 	}, nil
 }
 
@@ -322,7 +342,7 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		ProjectID: proj.ID,
 		Title:     title,
 		Body:      "",
-		Status:    "open",
+		Status:    "todo",
 		DueAt:     dueAt,
 	})
 	if err != nil {
@@ -516,4 +536,224 @@ func jsonError(w http.ResponseWriter, message string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(jsonResponse{Success: false, Message: message})
+}
+
+func (s *Server) handleUpdateStatus(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+
+	project := r.FormValue("project")
+	status := r.FormValue("status")
+
+	// Validate status
+	if status != "todo" && status != "doing" && status != "done" {
+		http.Error(w, "Invalid status", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	q := dbgen.New(s.DB)
+
+	proj, err := q.GetProjectByName(ctx, project)
+	if err != nil {
+		http.Error(w, "Project not found", http.StatusBadRequest)
+		return
+	}
+
+	_, err = q.UpdateTaskStatus(ctx, dbgen.UpdateTaskStatusParams{
+		Status:    status,
+		ID:        id,
+		ProjectID: proj.ID,
+	})
+	if err != nil {
+		http.Error(w, "Failed to update task status", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("HX-Trigger", "taskUpdated")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handlePartialKanban(w http.ResponseWriter, r *http.Request) {
+	project := r.URL.Query().Get("project")
+	if project == "" {
+		project = s.DefaultProject
+	}
+
+	lang := i18n.DetectLanguageFromRequest(r)
+	data, err := s.buildKanbanData(r.Context(), project, lang)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.templates.ExecuteTemplate(w, "kanban.html", data); err != nil {
+		slog.Error("render kanban partial", "error", err)
+	}
+}
+
+func (s *Server) buildKanbanData(ctx context.Context, projectName string, lang string) (*pageData, error) {
+	q := dbgen.New(s.DB)
+
+	projects, err := q.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	proj, err := q.GetProjectByName(ctx, projectName)
+	if err == sql.ErrNoRows {
+		proj, err = q.CreateProject(ctx, projectName)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Get tasks by status
+	todoRows, err := q.ListTasksTodo(ctx, proj.ID)
+	if err != nil {
+		return nil, err
+	}
+	doingRows, err := q.ListTasksDoing(ctx, proj.ID)
+	if err != nil {
+		return nil, err
+	}
+	doneRows, err := q.ListTasksDone(ctx, proj.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to task views
+	todoTasks := convertToTaskViewsTodo(ctx, q, todoRows)
+	doingTasks := convertToTaskViewsDoing(ctx, q, doingRows)
+	doneTasks := convertToTaskViewsDone(ctx, q, doneRows)
+
+	// Get due presets
+	duePresets := getDuePresets(lang)
+
+	return &pageData{
+		Projects:       projects,
+		CurrentProject: projectName,
+		TodoTasks:      todoTasks,
+		DoingTasks:     doingTasks,
+		DoneTasks:      doneTasks,
+		DuePresets:     duePresets,
+		T: func(key string) string {
+			return i18n.Translate(lang, key)
+		},
+	}, nil
+}
+
+func convertToTaskViewsTodo(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListTasksTodoRow) []taskView {
+	var views []taskView
+	for _, t := range rows {
+		tags, _ := q.ListTagsForTask(ctx, t.ID)
+		tagNames := make([]string, len(tags))
+		for i, tag := range tags {
+			tagNames[i] = tag.Name
+		}
+		tv := taskView{
+			ID:        t.ID,
+			Title:     t.Title,
+			Body:      t.Body,
+			Status:    t.Status,
+			DueAt:     t.DueAt,
+			Tags:      tagNames,
+			CreatedAt: t.CreatedAt,
+			IsDone:    false,
+		}
+		if t.DueAt != nil {
+			tv.IsOverdue = *t.DueAt < time.Now().Unix()
+		}
+		views = append(views, tv)
+	}
+	return views
+}
+
+func convertToTaskViewsDoing(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListTasksDoingRow) []taskView {
+	var views []taskView
+	for _, t := range rows {
+		tags, _ := q.ListTagsForTask(ctx, t.ID)
+		tagNames := make([]string, len(tags))
+		for i, tag := range tags {
+			tagNames[i] = tag.Name
+		}
+		tv := taskView{
+			ID:        t.ID,
+			Title:     t.Title,
+			Body:      t.Body,
+			Status:    t.Status,
+			DueAt:     t.DueAt,
+			Tags:      tagNames,
+			CreatedAt: t.CreatedAt,
+			IsDone:    false,
+		}
+		if t.DueAt != nil {
+			tv.IsOverdue = *t.DueAt < time.Now().Unix()
+		}
+		views = append(views, tv)
+	}
+	return views
+}
+
+func convertToTaskViewsDone(ctx context.Context, q *dbgen.Queries, rows []dbgen.ListTasksDoneRow) []taskView {
+	var views []taskView
+	for _, t := range rows {
+		tags, _ := q.ListTagsForTask(ctx, t.ID)
+		tagNames := make([]string, len(tags))
+		for i, tag := range tags {
+			tagNames[i] = tag.Name
+		}
+		tv := taskView{
+			ID:        t.ID,
+			Title:     t.Title,
+			Body:      t.Body,
+			Status:    t.Status,
+			DueAt:     t.DueAt,
+			Tags:      tagNames,
+			CreatedAt: t.CreatedAt,
+			IsDone:    true,
+		}
+		views = append(views, tv)
+	}
+	return views
+}
+
+func getDuePresets(lang string) []duePreset {
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
+	tomorrow := today.AddDate(0, 0, 1)
+	
+	// End of this week (Sunday)
+	daysUntilSunday := (7 - int(now.Weekday())) % 7
+	if daysUntilSunday == 0 {
+		daysUntilSunday = 7
+	}
+	endOfWeek := today.AddDate(0, 0, daysUntilSunday)
+	
+	// End of this month
+	endOfMonth := time.Date(now.Year(), now.Month()+1, 0, 23, 59, 59, 0, now.Location())
+	
+	// End of next month
+	endOfNextMonth := time.Date(now.Year(), now.Month()+2, 0, 23, 59, 59, 0, now.Location())
+
+	presets := []duePreset{
+		{Value: today.Format("2006-01-02"), Label: i18n.Translate(lang, "web.due.today")},
+		{Value: tomorrow.Format("2006-01-02"), Label: i18n.Translate(lang, "web.due.tomorrow")},
+		{Value: endOfWeek.Format("2006-01-02"), Label: i18n.Translate(lang, "web.due.this_week")},
+		{Value: endOfMonth.Format("2006-01-02"), Label: i18n.Translate(lang, "web.due.this_month")},
+		{Value: endOfNextMonth.Format("2006-01-02"), Label: i18n.Translate(lang, "web.due.next_month")},
+	}
+	return presets
 }
