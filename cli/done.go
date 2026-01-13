@@ -17,6 +17,7 @@ var doneCmd = &cobra.Command{
 }
 
 func runDone(cmd *cobra.Command, args []string) error {
+	defer notifyWeb()
 	id, err := parseID(args[0])
 	if err != nil {
 		return err
@@ -55,6 +56,7 @@ var undoCmd = &cobra.Command{
 }
 
 func runUndo(cmd *cobra.Command, args []string) error {
+	defer notifyWeb()
 	id, err := parseID(args[0])
 	if err != nil {
 		return err
@@ -93,6 +95,7 @@ var rmCmd = &cobra.Command{
 }
 
 func runRm(cmd *cobra.Command, args []string) error {
+	defer notifyWeb()
 	id, err := parseID(args[0])
 	if err != nil {
 		return err

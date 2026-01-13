@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"runtime"
 
@@ -21,11 +22,13 @@ var webCmd = &cobra.Command{
 var (
 	webPort int
 	webOpen bool
+	webDev  bool
 )
 
 func init() {
 	webCmd.Flags().IntVar(&webPort, "port", 0, "port to listen on (0 = auto-select from 9000-9999)")
 	webCmd.Flags().BoolVar(&webOpen, "open", false, "open browser after starting")
+	webCmd.Flags().BoolVar(&webDev, "dev", false, "run in development mode (serve static files from web/dist)")
 }
 
 func runWeb(cmd *cobra.Command, args []string) error {
@@ -41,7 +44,7 @@ func runWeb(cmd *cobra.Command, args []string) error {
 
 	projectName := config.ResolveProject(flagProject)
 
-	server, err := srv.New(config.DBPath(), projectName)
+	server, err := srv.New(config.DBPath(), projectName, webDev)
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
 	}
@@ -56,6 +59,9 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	if webOpen {
 		go openBrowser(url)
 	}
+
+	// Save port to file so other CLI commands can notify the server
+	_ = os.WriteFile(config.PortFilePath(), []byte(fmt.Sprintf("%d", port)), 0644)
 
 	return server.Serve(addr)
 }

@@ -36,6 +36,7 @@ func init() {
 }
 
 func runAdd(cmd *cobra.Command, args []string) error {
+	defer notifyWeb()
 	title := strings.Join(args, " ")
 	if title == "" {
 		return fmt.Errorf("title is required")

@@ -24,6 +24,7 @@ var (
 	editBody  string
 	editTags  []string
 	editDue   string
+	editStatus string
 	editAI    bool
 	editNoAI  bool
 )
@@ -33,11 +34,13 @@ func init() {
 	editCmd.Flags().StringVar(&editBody, "body", "", "new body")
 	editCmd.Flags().StringArrayVar(&editTags, "tag", nil, "replace tags (can be specified multiple times)")
 	editCmd.Flags().StringVar(&editDue, "due", "", "new due date (YYYY-MM-DD or YYYY-MM-DD HH:MM, use 'none' to clear)")
+	editCmd.Flags().StringVarP(&editStatus, "status", "s", "", "new status (todo, doing, review, done)")
 	editCmd.Flags().BoolVar(&editAI, "ai", false, "force AI assist on")
 	editCmd.Flags().BoolVar(&editNoAI, "no-ai", false, "force AI assist off")
 }
 
 func runEdit(cmd *cobra.Command, args []string) error {
+	defer notifyWeb()
 	id, err := parseID(args[0])
 	if err != nil {
 		return err
@@ -137,6 +140,17 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	task, err := q.UpdateTask(ctx, params)
 	if err != nil {
 		return fmt.Errorf("update task: %w", err)
+	}
+
+	if editStatus != "" {
+		task, err = q.UpdateTaskStatus(ctx, dbgen.UpdateTaskStatusParams{
+			ID:        id,
+			ProjectID: projectID,
+			Status:    editStatus,
+		})
+		if err != nil {
+			return fmt.Errorf("update task status: %w", err)
+		}
 	}
 
 	// Handle tags if specified
