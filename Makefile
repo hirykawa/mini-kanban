@@ -1,6 +1,9 @@
-.PHONY: build clean stop start restart test
+.PHONY: build clean stop start restart test build-web
 
-build:
+build-web:
+	cd web && npm install && npm run build
+
+build: build-web
 	go build -o mini-kanban ./cmd
 
 clean:
