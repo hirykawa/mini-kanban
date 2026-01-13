@@ -1,0 +1,244 @@
+name: Release to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            npm_os: linux
+            npm_cpu: x64
+          - goos: linux
+            goarch: arm64
+            npm_os: linux
+            npm_cpu: arm64
+          - goos: darwin
+            goarch: amd64
+            npm_os: darwin
+            npm_cpu: x64
+          - goos: darwin
+            goarch: arm64
+            npm_os: darwin
+            npm_cpu: arm64
+          - goos: windows
+            goarch: amd64
+            npm_os: win32
+            npm_cpu: x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          BINARY_NAME="mini-kanban"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY_NAME="mini-kanban.exe"
+          fi
+          go build -ldflags="-s -w" -o dist/$BINARY_NAME ./cmd
+
+      - name: Create platform package
+        run: |
+          mkdir -p npm-package
+          
+          # バイナリをコピー
+          cp dist/* npm-package/
+          
+          # プラットフォーム別の package.json を作成
+          cat > npm-package/package.json << EOF
+          {
+            "name": "@mini-kanban/${{ matrix.npm_os }}-${{ matrix.npm_cpu }}",
+            "version": "${{ steps.version.outputs.VERSION }}",
+            "description": "Mini-Kanban binary for ${{ matrix.npm_os }} ${{ matrix.npm_cpu }}",
+            "os": ["${{ matrix.npm_os }}"],
+            "cpu": ["${{ matrix.npm_cpu }}"],
+            "main": "mini-kanban${{ matrix.goos == 'windows' && '.exe' || '' }}",
+            "repository": {
+              "type": "git",
+              "url": "git+https://github.com/${{ github.repository }}.git"
+            },
+            "license": "MIT"
+          }
+          EOF
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-${{ matrix.npm_os }}-${{ matrix.npm_cpu }}
+          path: npm-package/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in artifacts/npm-*; do
+            echo "Publishing $dir..."
+            cd "$dir"
+            npm publish --access public || true
+            cd -
+          done
+
+      - name: Create main package
+        run: |
+          mkdir -p main-package/bin
+          
+          # メインの package.json を作成
+          cat > main-package/package.json << 'EOF'
+          {
+            "name": "mini-kanban",
+            "version": "${{ steps.version.outputs.VERSION }}",
+            "description": "軽量・高速なタスク管理 CLI およびローカル Web アプリケーション",
+            "bin": {
+              "mini-kanban": "./bin/mini-kanban.js",
+              "minikanban": "./bin/mini-kanban.js"
+            },
+            "optionalDependencies": {
+              "@mini-kanban/linux-x64": "${{ steps.version.outputs.VERSION }}",
+              "@mini-kanban/linux-arm64": "${{ steps.version.outputs.VERSION }}",
+              "@mini-kanban/darwin-x64": "${{ steps.version.outputs.VERSION }}",
+              "@mini-kanban/darwin-arm64": "${{ steps.version.outputs.VERSION }}",
+              "@mini-kanban/win32-x64": "${{ steps.version.outputs.VERSION }}"
+            },
+            "repository": {
+              "type": "git",
+              "url": "git+https://github.com/${{ github.repository }}.git"
+            },
+            "keywords": ["kanban", "task", "cli", "todo"],
+            "license": "MIT"
+          }
+          EOF
+          
+          # ランチャースクリプトを作成
+          cat > main-package/bin/mini-kanban.js << 'SCRIPT'
+          #!/usr/bin/env node
+          
+          const { spawn } = require('child_process');
+          const path = require('path');
+          const fs = require('fs');
+          
+          function getBinaryPath() {
+            const platform = process.platform;
+            const arch = process.arch;
+            
+            const platformMap = {
+              'linux': 'linux',
+              'darwin': 'darwin',
+              'win32': 'win32'
+            };
+            
+            const archMap = {
+              'x64': 'x64',
+              'arm64': 'arm64'
+            };
+            
+            const npmPlatform = platformMap[platform];
+            const npmArch = archMap[arch];
+            
+            if (!npmPlatform || !npmArch) {
+              console.error(`Unsupported platform: ${platform} ${arch}`);
+              process.exit(1);
+            }
+            
+            const packageName = `@mini-kanban/${npmPlatform}-${npmArch}`;
+            const binaryName = platform === 'win32' ? 'mini-kanban.exe' : 'mini-kanban';
+            
+            try {
+              const packagePath = require.resolve(`${packageName}/package.json`);
+              return path.join(path.dirname(packagePath), binaryName);
+            } catch (e) {
+              console.error(`Platform package not found: ${packageName}`);
+              console.error('Please install mini-kanban with npm install -g mini-kanban');
+              process.exit(1);
+            }
+          }
+          
+          const binaryPath = getBinaryPath();
+          
+          if (!fs.existsSync(binaryPath)) {
+            console.error(`Binary not found at: ${binaryPath}`);
+            process.exit(1);
+          }
+          
+          const child = spawn(binaryPath, process.argv.slice(2), {
+            stdio: 'inherit',
+            env: process.env
+          });
+          
+          child.on('error', (err) => {
+            console.error('Failed to execute binary:', err);
+            process.exit(1);
+          });
+          
+          child.on('close', (code) => {
+            process.exit(code || 0);
+          });
+          SCRIPT
+          
+          chmod +x main-package/bin/mini-kanban.js
+
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: main-package
+        run: npm publish --access public
