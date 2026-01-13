@@ -110,12 +110,15 @@ var messagesJA = map[string]string{
 	"web.overdue":      "期限切れ",
 	"web.created":      "作成日",
 	"web.footer":       "mini-kanban • 軽量タスク管理",
+	"web.edit.save":    "保存",
+	"web.edit.cancel":  "キャンセル",
 	"web.page.title":   "mini-kanban",
 
 	// Kanban columns
-	"web.kanban.todo":  "Todo",
-	"web.kanban.doing": "作業中",
-	"web.kanban.done":  "完了",
+	"web.kanban.todo":   "Todo",
+	"web.kanban.doing":  "作業中",
+	"web.kanban.review": "レビュー",
+	"web.kanban.done":   "完了",
 
 	// Due date presets
 	"web.due.today":       "今日まで",
