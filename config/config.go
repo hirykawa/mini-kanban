@@ -135,6 +135,11 @@ func DBPath() string {
 	}
 }
 
+// PortFilePath returns the path to the file where the web server port is stored.
+func PortFilePath() string {
+	return filepath.Join(filepath.Dir(DBPath()), "web.port")
+}
+
 // Load loads configuration from the global config file.
 func Load() (Config, error) {
 	cfg := DefaultConfig()

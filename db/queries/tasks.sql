@@ -33,7 +33,7 @@ UPDATE tasks SET
     body = COALESCE(sqlc.narg('body'), body),
     due_at = CASE WHEN sqlc.narg('clear_due') = 1 THEN NULL ELSE COALESCE(sqlc.narg('due_at'), due_at) END,
     updated_at = unixepoch()
-WHERE id = ? AND project_id = ?
+WHERE id = sqlc.arg('id') AND project_id = sqlc.arg('project_id')
 RETURNING *;
 
 -- name: MarkTaskDone :one
@@ -52,6 +52,21 @@ UPDATE tasks SET
 WHERE id = ? AND project_id = ?
 RETURNING *;
 
+-- name: MarkTaskOpen :one
+UPDATE tasks SET
+    status = 'todo',
+    done_at = NULL,
+    updated_at = unixepoch()
+WHERE id = ? AND project_id = ?
+RETURNING *;
+
+-- name: ListTasksOpen :many
+SELECT t.*, p.name as project_name
+FROM tasks t
+JOIN projects p ON t.project_id = p.id
+WHERE t.project_id = ? AND t.status != 'done'
+ORDER BY t.created_at DESC;
+
 -- name: DeleteTask :exec
 DELETE FROM tasks WHERE id = ? AND project_id = ?;
 
@@ -61,7 +76,7 @@ FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ?
 ORDER BY
-    CASE t.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'done' THEN 2 END,
+    CASE t.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'review' THEN 2 WHEN 'done' THEN 3 END,
     t.created_at DESC;
 
 -- name: ListTasksTodo :many
@@ -84,6 +99,13 @@ FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.status = 'done'
 ORDER BY t.done_at DESC;
+
+-- name: ListTasksReview :many
+SELECT t.*, p.name as project_name
+FROM tasks t
+JOIN projects p ON t.project_id = p.id
+WHERE t.project_id = ? AND t.status = 'review'
+ORDER BY t.created_at DESC;
 
 -- name: SearchTasksLike :many
 SELECT t.*, p.name as project_name
@@ -158,8 +180,8 @@ ORDER BY t.created_at DESC;
 
 -- name: UpdateTaskStatus :one
 UPDATE tasks SET
-    status = ?,
-    done_at = CASE WHEN ? = 'done' THEN unixepoch() ELSE NULL END,
+    status = sqlc.arg('status'),
+    done_at = CASE WHEN sqlc.arg('status') = 'done' THEN unixepoch() ELSE NULL END,
     updated_at = unixepoch()
 WHERE id = ? AND project_id = ?
 RETURNING *;
@@ -170,5 +192,5 @@ FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ?
 ORDER BY
-    CASE t.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'done' THEN 2 END,
+    CASE t.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'review' THEN 2 WHEN 'done' THEN 3 END,
     t.created_at DESC;

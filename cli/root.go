@@ -15,6 +15,8 @@ import (
 	"mini-kanban/db"
 	"mini-kanban/db/dbgen"
 	"mini-kanban/i18n"
+	"net/http"
+	"time"
 )
 
 var (
@@ -219,4 +221,18 @@ func getProjectAIContext() (string, *config.ProjectConfig, error) {
 		return "", nil, fmt.Errorf("load project config: %w", err)
 	}
 	return config.GetAIContext(dir, pc), pc, nil
+}
+
+// notifyWeb sends a notification to the local web server if it's running.
+func notifyWeb() {
+	portData, err := os.ReadFile(config.PortFilePath())
+	if err != nil {
+		return
+	}
+
+	client := http.Client{
+		Timeout: 500 * time.Millisecond,
+	}
+	url := fmt.Sprintf("http://127.0.0.1:%s/internal/notify", string(portData))
+	_, _ = client.Post(url, "application/json", nil)
 }

@@ -1,5 +1,8 @@
 # Mini-Kanban
 
+![Mini-Kanban](assets/mini-kanban.png)
+
+
 軽量・高速なタスク管理 CLI およびローカル Web アプリケーションです。
 
 ## 特徴
@@ -10,59 +13,27 @@
 - 📁 プロジェクト別のタスク管理
 - 💾 SQLite によるオフライン対応のローカルストレージ
 
-## 初期設定 / はじめに
- 
- 初めて使用する場合は、`init` コマンドを実行して環境を初期化することをおすすめします。
- 
- ```bash
- # 設定ファイルとデータベースの準備
- mini-kanban init
- ```
- 
- これにより、以下の処理が行われます:
- - 設定ファイルの作成 (`~/.config/mini-kanban/config.toml` など)
- - データベースディレクトリの準備
- 
- ## インストール・起動
-
-### ビルド
+## インストール
 
 ```bash
-make build
+# npx で直接実行（インストール不要）
+npx mini-kanban
+
+# または、グローバルインストール
+npm install -g mini-kanban
 ```
 
-### Go で直接実行（ビルド不要）
+## 初期設定
+
+初めて使用する場合は、`init` コマンドを実行して環境を初期化することをおすすめします。
 
 ```bash
-# CLI として使用
-go run ./cmd [コマンド]
-
-# 例: タスク一覧
-go run ./cmd ls
-
-# 例: Web UI を起動
-go run ./cmd web
+mini-kanban init
 ```
 
-### ローカルで起動
-
-```bash
-# CLI として使用
-./mini-kanban
-
-# Web UI をローカルで起動（デフォルト: http://localhost:8000）
-./mini-kanban web
-
-# ポートを指定して起動
-./mini-kanban web -p 3000
-```
-
-### 開発時のビルド＆起動
-
-```bash
-# ビルドして即座に実行
-make build && ./mini-kanban web
-```
+これにより、以下の処理が行われます:
+- 設定ファイルの作成 (`~/.config/mini-kanban/config.toml` など)
+- データベースディレクトリの準備
 
 ## 使い方
 
@@ -158,61 +129,33 @@ mini-kanban web -p 3000
 | `MINI_KANBAN_PROJECT` | デフォルトプロジェクト名 | `default` |
 | `MINI_KANBAN_LANG` | ヘルプの言語 (`en`, `ja`) | (自動検出) |
 
-#### 標準パスと XDG 変数
+### 標準パスと XDG 変数
 
-アプリは標準的な XDG ディレクトリ構成に従います。以下の環境変数でパスをカスタマイズできます。
+アプリは標準的な XDG ディレクトリ構成に従います。
 
-- `XDG_CONFIG_HOME`: 設定ファイル (`config.toml`) の保存先。デフォルト: `~/.config/mini-kanban/`
-- `XDG_DATA_HOME`: データベースファイルの保存先。デフォルト: `~/.local/share/mini-kanban/tasks.db` (Linux)
+- `XDG_CONFIG_HOME`: 設定ファイルの保存先。デフォルト: `~/.config/mini-kanban/`
+- `XDG_DATA_HOME`: データベースファイルの保存先。デフォルト: `~/.local/share/mini-kanban/tasks.db`
 
 > [!NOTE]
 > `MINI_KANBAN_DB` が設定されている場合、それが最優先でデータベースパスとして使用されます。
 
 ### 国際化 (i18n)
 
-CLIは日本語と英語のヘルプ表示に対応しています。
-
-#### 言語の自動検出
-環境変数 `LANG`, `LC_MESSAGES`, `LC_ALL` を参照して自動的に適切な言語を選択します。
-
-#### 言語の明示的指定
-`--lang` フラグを使用して、コマンド実行時に言語を指定できます。
+CLI は日本語と英語のヘルプ表示に対応しています。
 
 ```bash
 # 日本語でヘルプを表示
-./mini-kanban --lang ja --help
+mini-kanban --lang ja --help
 
 # 英語でヘルプを表示
-./mini-kanban --lang en --help
+mini-kanban --lang en --help
 ```
 
 環境変数 `MINI_KANBAN_LANG` を設定することで、永続的に言語を固定することも可能です。
 
-```bash
-export MINI_KANBAN_LANG=ja
-./mini-kanban --help
-```
+## 開発者向け情報
 
-### 設定コマンド
-
-```bash
-# 設定を表示
-mini-kanban config show
-```
-
-## ディレクトリ構成
-
-```
-mini-kanban/
-├── cmd/mini-kanban/  # メインエントリポイント
-├── cli/              # CLI コマンド実装
-├── srv/              # Web サーバー・ハンドラー
-│   └── templates/    # HTML テンプレート
-├── db/               # データベース・マイグレーション
-├── ai/               # AI 支援機能
-├── config/           # 設定管理
-└── search/           # 検索機能
-```
+ビルド方法、ディレクトリ構成、リリース手順などは [開発者ガイド](docs/DEVELOPMENT.md) を参照してください。
 
 ## ライセンス
 

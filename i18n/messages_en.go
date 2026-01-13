@@ -110,12 +110,15 @@ var messagesEN = map[string]string{
 	"web.overdue":      "Overdue",
 	"web.created":      "Created",
 	"web.footer":       "mini-kanban • Lightweight task management",
+	"web.edit.save":    "Save",
+	"web.edit.cancel":  "Cancel",
 	"web.page.title":   "mini-kanban",
 
 	// Kanban columns
-	"web.kanban.todo":  "Todo",
-	"web.kanban.doing": "Doing",
-	"web.kanban.done":  "Done",
+	"web.kanban.todo":   "Todo",
+	"web.kanban.doing":  "Doing",
+	"web.kanban.review": "Review",
+	"web.kanban.done":   "Done",
 
 	// Due date presets
 	"web.due.today":       "Today",
