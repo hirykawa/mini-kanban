@@ -101,6 +101,7 @@ func (s *Server) handleAPIKanban(w http.ResponseWriter, r *http.Request) {
 		CreatedAt int64    `json:"createdAt"`
 		UpdatedAt int64    `json:"updatedAt"`
 		IsOverdue bool     `json:"isOverdue"`
+		Project   string   `json:"project"`
 	}
 
 	type projectResponse struct {
@@ -111,6 +112,7 @@ func (s *Server) handleAPIKanban(w http.ResponseWriter, r *http.Request) {
 	// Group tasks by status
 	todoTasks := []taskResponse{}
 	doingTasks := []taskResponse{}
+	reviewTasks := []taskResponse{}
 	doneTasks := []taskResponse{}
 
 	now := time.Now().Unix()
@@ -134,6 +136,7 @@ func (s *Server) handleAPIKanban(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: t.CreatedAt,
 			UpdatedAt: t.UpdatedAt,
 			IsOverdue: isOverdue,
+			Project:   t.ProjectName,
 		}
 
 		switch t.Status {
@@ -141,6 +144,8 @@ func (s *Server) handleAPIKanban(w http.ResponseWriter, r *http.Request) {
 			todoTasks = append(todoTasks, resp)
 		case "doing":
 			doingTasks = append(doingTasks, resp)
+		case "review":
+			reviewTasks = append(reviewTasks, resp)
 		case "done":
 			doneTasks = append(doneTasks, resp)
 		}
@@ -167,6 +172,7 @@ func (s *Server) handleAPIKanban(w http.ResponseWriter, r *http.Request) {
 		CurrentProject string            `json:"currentProject"`
 		TodoTasks      []taskResponse    `json:"todoTasks"`
 		DoingTasks     []taskResponse    `json:"doingTasks"`
+		ReviewTasks    []taskResponse    `json:"reviewTasks"`
 		DoneTasks      []taskResponse    `json:"doneTasks"`
 		Tags           []string          `json:"tags"`
 	}{
@@ -174,6 +180,7 @@ func (s *Server) handleAPIKanban(w http.ResponseWriter, r *http.Request) {
 		CurrentProject: projectName,
 		TodoTasks:      todoTasks,
 		DoingTasks:     doingTasks,
+		ReviewTasks:    reviewTasks,
 		DoneTasks:      doneTasks,
 		Tags:           tagList,
 	}
@@ -189,6 +196,7 @@ func (s *Server) handleAPICreateTask(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Project string   `json:"project"`
 		Title   string   `json:"title"`
+		Body    string   `json:"body"`
 		Tags    []string `json:"tags"`
 		DueAt   string   `json:"dueAt"`
 	}
@@ -207,7 +215,7 @@ func (s *Server) handleAPICreateTask(w http.ResponseWriter, r *http.Request) {
 	params := dbgen.CreateTaskParams{
 		ProjectID: projectID,
 		Title:     req.Title,
-		Body:      "",
+		Body:      req.Body,
 		Status:    "todo",
 	}
 
@@ -260,11 +268,11 @@ func (s *Server) handleAPIUpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Project     string `json:"project"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Status      string `json:"status"`
-		DueDate     string `json:"due_date"`
+		Project string `json:"project"`
+		Title   string `json:"title"`
+		Body    string `json:"body"`
+		Status  string `json:"status"`
+		DueDate string `json:"due_date"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -311,7 +319,7 @@ func (s *Server) handleAPIUpdateTask(w http.ResponseWriter, r *http.Request) {
 		ID:        id,
 		ProjectID: projectID,
 		Title:     &req.Title,
-		Body:      &req.Description,
+		Body:      &req.Body,
 		ClearDue:  clearDue,
 		DueAt:     dueAt,
 	})
@@ -399,6 +407,3 @@ func (s *Server) handleAPIUpdateStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(task)
 }
-
-// Unused import guard
-var _ = time.Now

@@ -183,7 +183,7 @@ UPDATE tasks SET
     status = sqlc.arg('status'),
     done_at = CASE WHEN sqlc.arg('status') = 'done' THEN unixepoch() ELSE NULL END,
     updated_at = unixepoch()
-WHERE id = ? AND project_id = ?
+WHERE id = sqlc.arg('id') AND project_id = sqlc.arg('project_id')
 RETURNING *;
 
 -- name: ListAllTasksGrouped :many
