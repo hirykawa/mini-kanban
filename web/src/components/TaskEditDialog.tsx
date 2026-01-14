@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { Task } from '@/lib/api';
 import {
   Dialog,
@@ -9,28 +11,35 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TagInput } from '@/components/ui/tag-input';
+import { cn } from "@/lib/utils";
 
 interface TaskEditDialogProps {
   task: Task;
   project: string;
+  availableTags?: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (taskId: number, updates: { title?: string; tags?: string[]; dueAt?: string }) => void;
+  onSave: (taskId: number, updates: { title?: string; body?: string; tags?: string[]; dueAt?: string }) => void;
 }
 
-export function TaskEditDialog({ task, open, onOpenChange, onSave }: TaskEditDialogProps) {
+export function TaskEditDialog({ task, availableTags = [], open, onOpenChange, onSave }: TaskEditDialogProps) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState(task.title);
-  const [tags, setTags] = useState(task.tags.join(', '));
+  const [body, setBody] = useState(task.body || '');
+  const [tags, setTags] = useState<string[]>(task.tags);
   const [dueAt, setDueAt] = useState(() => {
     if (!task.dueAt) return '';
     const date = new Date(task.dueAt * 1000);
     return date.toISOString().split('T')[0];
   });
+  const [isPreview, setIsPreview] = useState(false);
 
   const handleSave = () => {
     onSave(task.id, {
       title: title !== task.title ? title : undefined,
-      tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+      body: body !== (task.body || '') ? body : undefined,
+      tags: tags,
       dueAt: dueAt || 'none',
     });
     onOpenChange(false);
@@ -38,41 +47,94 @@ export function TaskEditDialog({ task, open, onOpenChange, onSave }: TaskEditDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Task #{task.id}</DialogTitle>
+          <DialogTitle>{t('editTaskTitle', { id: task.id })}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Title</label>
+            <label className="text-sm font-medium">{t('title')}</label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Task title"
+              placeholder={t('taskTitlePlaceholder')}
             />
           </div>
+          
           <div className="space-y-2">
-            <label className="text-sm font-medium">Tags (comma separated)</label>
-            <Input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              placeholder="tag1, tag2, tag3"
-            />
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-medium">{t('description')}</label>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setIsPreview(!isPreview)}
+                className="h-6 text-xs"
+              >
+                {isPreview ? t('edit') : t('preview')}
+              </Button>
+            </div>
+             {isPreview ? (
+              <div className="min-h-[150px] p-3 border rounded-md bg-transparent text-sm overflow-y-auto max-h-[300px]">
+                 {body ? (
+                   <ReactMarkdown
+                    components={{
+                      h1: (props) => <h1 className="text-xl font-bold mb-2 mt-4 first:mt-0" {...props} />,
+                      h2: (props) => <h2 className="text-lg font-bold mb-2 mt-4" {...props} />,
+                      h3: (props) => <h3 className="text-base font-bold mb-2 mt-2" {...props} />,
+                      p: (props) => <p className="mb-2 leading-relaxed" {...props} />,
+                      ul: (props) => <ul className="list-disc list-inside mb-2" {...props} />,
+                      ol: (props) => <ol className="list-decimal list-inside mb-2" {...props} />,
+                      code: (props) => <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono" {...props} />,
+                      pre: (props) => <pre className="bg-muted p-2 rounded mb-2 overflow-x-auto text-xs" {...props} />,
+                      blockquote: (props) => <blockquote className="border-l-4 border-muted pl-2 text-muted-foreground italic mb-2" {...props} />,
+                      a: (props) => <a className="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                    }}
+                   >
+                     {body}
+                   </ReactMarkdown>
+                 ) : (
+                   <span className="text-muted-foreground italic">{t('noDescription')}</span>
+                 )}
+              </div>
+             ) : (
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder={t('descriptionPlaceholder')}
+                className={cn(
+                  "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input w-full min-w-0 rounded-md border bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+                  "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+                  "min-h-[150px] resize-y"
+                )}
+              />
+            )}
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Due Date</label>
-            <Input
-              type="date"
-              value={dueAt}
-              onChange={(e) => setDueAt(e.target.value)}
-            />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('tagsSimple')}</label>
+              <TagInput
+                value={tags}
+                onChange={setTags}
+                suggestions={availableTags}
+                placeholder={t('tagsExamplePlaceholder')}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t('dueDate')}</label>
+              <Input
+                type="date"
+                value={dueAt}
+                onChange={(e) => setDueAt(e.target.value)}
+              />
+            </div>
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('cancel')}
           </Button>
-          <Button onClick={handleSave}>Save</Button>
+          <Button onClick={handleSave}>{t('save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,20 +1,23 @@
 import { useTasks } from '@/hooks/useTasks';
 import { useSSE } from '@/hooks/useSSE';
+import { useTranslation } from '@/hooks/useTranslation';
 import { Header } from '@/components/Header';
 import { KanbanBoard } from '@/components/KanbanBoard';
 
 function App() {
+  const { t } = useTranslation();
   const {
     data,
     loading,
     error,
-    currentProject,
+    currentProjects,
+    isMultiProject,
     refresh,
     addTask,
     moveTask,
     removeTask,
     editTask,
-    switchProject,
+    switchProjects,
   } = useTasks();
 
   // Listen for SSE updates
@@ -23,7 +26,7 @@ function App() {
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="text-muted-foreground">{t('loading')}</div>
       </div>
     );
   }
@@ -31,7 +34,7 @@ function App() {
   if (error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-red-500">Error: {error}</div>
+        <div className="text-red-500">{t('error', { error })}</div>
       </div>
     );
   }
@@ -45,12 +48,13 @@ function App() {
       <div className="container mx-auto px-4 py-6 max-w-7xl">
         <Header
           projects={data.projects}
-          currentProject={currentProject}
-          onProjectChange={switchProject}
+          currentProjects={currentProjects}
+          onProjectChange={switchProjects}
         />
         <main>
           <KanbanBoard
             data={data}
+            isMultiProject={isMultiProject}
             onAddTask={addTask}
             onMoveTask={moveTask}
             onDeleteTask={removeTask}
@@ -58,7 +62,7 @@ function App() {
           />
         </main>
         <footer className="mt-8 pt-4 border-t text-center text-sm text-muted-foreground">
-          mini-kanban — A simple kanban board 2026
+          {t('footer')}
         </footer>
       </div>
     </div>

@@ -1139,10 +1139,10 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 
 const updateTaskStatus = `-- name: UpdateTaskStatus :one
 UPDATE tasks SET
-    status = ?3,
-    done_at = CASE WHEN ?3 = 'done' THEN unixepoch() ELSE NULL END,
+    status = ?1,
+    done_at = CASE WHEN ?1 = 'done' THEN unixepoch() ELSE NULL END,
     updated_at = unixepoch()
-WHERE id = ? AND project_id = ?
+WHERE id = ?2 AND project_id = ?3
 RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at
 `
 
