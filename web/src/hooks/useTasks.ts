@@ -2,19 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import type { KanbanData, Task } from '@/lib/api';
 import { fetchKanban, createTask, updateTaskStatus, deleteTask, updateTask } from '@/lib/api';
 
-export function useTasks(initialProject?: string) {
+export function useTasks(initialProjects?: string[]) {
   const [data, setData] = useState<KanbanData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentProject, setCurrentProject] = useState(initialProject || '');
+  const [currentProjects, setCurrentProjects] = useState<string[]>(initialProjects || []);
 
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await fetchKanban(currentProject || undefined);
+      const result = await fetchKanban(currentProjects.length > 0 ? currentProjects : undefined);
       setData(result);
-      if (!currentProject && result.currentProject) {
-        setCurrentProject(result.currentProject);
+      if (currentProjects.length === 0 && result.currentProjects && result.currentProjects.length > 0) {
+        setCurrentProjects(result.currentProjects);
       }
       setError(null);
     } catch (e) {
@@ -22,66 +22,76 @@ export function useTasks(initialProject?: string) {
     } finally {
       setLoading(false);
     }
-  }, [currentProject]);
+  }, [currentProjects]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const addTask = useCallback(async (title: string, tags?: string[], dueAt?: string) => {
-    if (!currentProject) return;
+  // For single project operations, use the first selected project
+  const primaryProject = currentProjects[0] || '';
+
+  const addTask = useCallback(async (title: string, tags?: string[], dueAt?: string, project?: string) => {
+    const targetProject = project || primaryProject || data?.currentProject;
+    if (!targetProject) return;
     try {
-      await createTask({ project: currentProject, title, tags, dueAt });
+      await createTask({ project: targetProject, title, tags, dueAt });
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create task');
     }
-  }, [currentProject, refresh]);
+  }, [primaryProject, data?.currentProject, refresh]);
 
-  const moveTask = useCallback(async (taskId: number, newStatus: Task['status']) => {
-    if (!currentProject) return;
+  const moveTask = useCallback(async (taskId: number, newStatus: Task['status'], project?: string) => {
+    const targetProject = project || primaryProject;
+    if (!targetProject) return;
     try {
-      await updateTaskStatus(taskId, currentProject, newStatus);
+      await updateTaskStatus(taskId, targetProject, newStatus);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to move task');
     }
-  }, [currentProject, refresh]);
+  }, [primaryProject, refresh]);
 
-  const removeTask = useCallback(async (taskId: number) => {
-    if (!currentProject) return;
+  const removeTask = useCallback(async (taskId: number, project?: string) => {
+    const targetProject = project || primaryProject;
+    if (!targetProject) return;
     try {
-      await deleteTask(taskId, currentProject);
+      await deleteTask(taskId, targetProject);
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete task');
     }
-  }, [currentProject, refresh]);
+  }, [primaryProject, refresh]);
 
-  const editTask = useCallback(async (taskId: number, updates: { title?: string; tags?: string[]; dueAt?: string }) => {
-    if (!currentProject) return;
+  const editTask = useCallback(async (taskId: number, updates: { title?: string; body?: string; tags?: string[]; dueAt?: string; project?: string }) => {
+    const targetProject = updates.project || primaryProject;
+    if (!targetProject) return;
     try {
-      await updateTask(taskId, { project: currentProject, ...updates });
+      await updateTask(taskId, { project: targetProject, ...updates });
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update task');
     }
-  }, [currentProject, refresh]);
+  }, [primaryProject, refresh]);
 
-  const switchProject = useCallback((project: string) => {
-    setCurrentProject(project);
+  const switchProjects = useCallback((projects: string[]) => {
+    setCurrentProjects(projects);
   }, []);
+
+  const isMultiProject = currentProjects.length > 1;
 
   return {
     data,
     loading,
     error,
-    currentProject,
+    currentProjects,
+    isMultiProject,
     refresh,
     addTask,
     moveTask,
     removeTask,
     editTask,
-    switchProject,
+    switchProjects,
   };
 }

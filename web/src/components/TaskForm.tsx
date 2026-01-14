@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { TagInput } from '@/components/ui/tag-input';
 import {
   Select,
   SelectContent,
@@ -11,13 +13,17 @@ import {
 
 interface TaskFormProps {
   project: string;
-  onSubmit: (title: string, tags?: string[], dueAt?: string) => void;
+  projects?: string[];
+  availableTags?: string[];
+  onSubmit: (title: string, tags?: string[], dueAt?: string, project?: string) => void;
 }
 
-export function TaskForm({ onSubmit }: TaskFormProps) {
+export function TaskForm({ project, projects, availableTags = [], onSubmit }: TaskFormProps) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
-  const [tags, setTags] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [due, setDue] = useState('today');
+  const [selectedProject, setSelectedProject] = useState(project);
 
   const getDueDate = (preset: string): string => {
     const now = new Date();
@@ -54,12 +60,12 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
     e.preventDefault();
     if (!title.trim()) return;
 
-    const tagList = tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined;
+    const tagList = tags.length > 0 ? tags : undefined;
     const dueAt = due !== 'none' ? getDueDate(due) : undefined;
 
-    onSubmit(title.trim(), tagList, dueAt);
+    onSubmit(title.trim(), tagList, dueAt, projects ? selectedProject : undefined);
     setTitle('');
-    setTags('');
+    setTags([]);
   };
 
   return (
@@ -67,30 +73,43 @@ export function TaskForm({ onSubmit }: TaskFormProps) {
       <Input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="New task title..."
+        placeholder={t('newTaskPlaceholder')}
         className="flex-1 min-w-[200px]"
         required
       />
-      <Input
+      <TagInput
         value={tags}
-        onChange={(e) => setTags(e.target.value)}
-        placeholder="Tags (comma separated)"
-        className="w-[180px]"
+        onChange={setTags}
+        suggestions={availableTags}
+        placeholder={t('tagsPlaceholder')}
+        className="w-[200px]"
       />
       <Select value={due} onValueChange={setDue}>
         <SelectTrigger className="w-[140px]">
-          <SelectValue placeholder="Due date" />
+          <SelectValue placeholder={t('dueDate')} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="none">No due date</SelectItem>
-          <SelectItem value="today">Today</SelectItem>
-          <SelectItem value="tomorrow">Tomorrow</SelectItem>
-          <SelectItem value="this-week">This week</SelectItem>
-          <SelectItem value="this-month">This month</SelectItem>
-          <SelectItem value="next-month">Next month</SelectItem>
+          <SelectItem value="none">{t('noDueDate')}</SelectItem>
+          <SelectItem value="today">{t('today')}</SelectItem>
+          <SelectItem value="tomorrow">{t('tomorrow')}</SelectItem>
+          <SelectItem value="this-week">{t('thisWeek')}</SelectItem>
+          <SelectItem value="this-month">{t('thisMonth')}</SelectItem>
+          <SelectItem value="next-month">{t('nextMonth')}</SelectItem>
         </SelectContent>
       </Select>
-      <Button type="submit">Add Task</Button>
+      {projects && projects.length > 1 && (
+        <Select value={selectedProject} onValueChange={setSelectedProject}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder={t('project')} />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((p) => (
+              <SelectItem key={p} value={p}>{p}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      <Button type="submit">{t('addTask')}</Button>
     </form>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { Task } from '@/lib/api';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,13 +14,15 @@ import { TaskEditDialog } from './TaskEditDialog';
 
 interface TaskCardProps {
   task: Task;
-  project: string;
-  onMove: (taskId: number, newStatus: Task['status']) => void;
-  onDelete: (taskId: number) => void;
-  onEdit: (taskId: number, updates: { title?: string; tags?: string[]; dueAt?: string }) => void;
+  showProject?: boolean;
+  availableTags?: string[];
+  onMove: (taskId: number, newStatus: Task['status'], project: string) => void;
+  onDelete: (taskId: number, project: string) => void;
+  onEdit: (taskId: number, updates: { title?: string; body?: string; tags?: string[]; dueAt?: string; project?: string }) => void;
 }
 
-export function TaskCard({ task, project, onMove, onDelete, onEdit }: TaskCardProps) {
+export function TaskCard({ task, showProject, availableTags, onMove, onDelete, onEdit }: TaskCardProps) {
+  const { t } = useTranslation();
   const [editOpen, setEditOpen] = useState(false);
 
   const formatDate = (unix: number) => {
@@ -29,6 +32,7 @@ export function TaskCard({ task, project, onMove, onDelete, onEdit }: TaskCardPr
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('taskId', task.id.toString());
+    e.dataTransfer.setData('project', task.project);
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -46,6 +50,11 @@ export function TaskCard({ task, project, onMove, onDelete, onEdit }: TaskCardPr
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs text-muted-foreground font-mono">#{task.id}</span>
+                {showProject && (
+                  <Badge variant="outline" className="text-xs px-1 py-0">
+                    {task.project}
+                  </Badge>
+                )}
                 {task.dueAt && (
                   <span className={`text-xs ${task.isOverdue ? 'text-red-500 font-bold' : 'text-muted-foreground'}`}>
                     {formatDate(task.dueAt)}
@@ -67,32 +76,37 @@ export function TaskCard({ task, project, onMove, onDelete, onEdit }: TaskCardPr
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {task.status !== 'todo' && (
-                  <DropdownMenuItem onClick={() => onMove(task.id, 'todo')}>
-                    Move to Todo
+                  <DropdownMenuItem onClick={() => onMove(task.id, 'todo', task.project)}>
+                    {t('moveToTodo')}
                   </DropdownMenuItem>
                 )}
                 {task.status !== 'doing' && (
-                  <DropdownMenuItem onClick={() => onMove(task.id, 'doing')}>
-                    Move to Doing
+                  <DropdownMenuItem onClick={() => onMove(task.id, 'doing', task.project)}>
+                    {t('moveToDoing')}
+                  </DropdownMenuItem>
+                )}
+                {task.status !== 'review' && (
+                  <DropdownMenuItem onClick={() => onMove(task.id, 'review', task.project)}>
+                    {t('moveToReview')}
                   </DropdownMenuItem>
                 )}
                 {task.status !== 'done' && (
-                  <DropdownMenuItem onClick={() => onMove(task.id, 'done')}>
-                    Move to Done
+                  <DropdownMenuItem onClick={() => onMove(task.id, 'done', task.project)}>
+                    {t('moveToDone')}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={() => setEditOpen(true)}>
-                  Edit
+                  {t('edit')}
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   className="text-red-600"
                   onClick={() => {
-                    if (confirm('Delete this task?')) {
-                      onDelete(task.id);
+                    if (confirm(t('deleteConfirm'))) {
+                      onDelete(task.id, task.project);
                     }
                   }}
                 >
-                  Delete
+                  {t('delete')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -113,7 +127,8 @@ export function TaskCard({ task, project, onMove, onDelete, onEdit }: TaskCardPr
       
       <TaskEditDialog
         task={task}
-        project={project}
+        project={task.project}
+        availableTags={availableTags}
         open={editOpen}
         onOpenChange={setEditOpen}
         onSave={onEdit}

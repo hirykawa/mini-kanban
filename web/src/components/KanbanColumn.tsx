@@ -1,3 +1,4 @@
+import { useTranslation } from '@/hooks/useTranslation';
 import type { Task } from '@/lib/api';
 import { TaskCard } from './TaskCard';
 
@@ -5,13 +6,15 @@ interface KanbanColumnProps {
   title: string;
   status: Task['status'];
   tasks: Task[];
-  project: string;
-  onMove: (taskId: number, newStatus: Task['status']) => void;
-  onDelete: (taskId: number) => void;
-  onEdit: (taskId: number, updates: { title?: string; tags?: string[]; dueAt?: string }) => void;
+  showProject: boolean;
+  availableTags?: string[];
+  onMove: (taskId: number, newStatus: Task['status'], project: string) => void;
+  onDelete: (taskId: number, project: string) => void;
+  onEdit: (taskId: number, updates: { title?: string; body?: string; tags?: string[]; dueAt?: string; project?: string }) => void;
 }
 
-export function KanbanColumn({ title, status, tasks, project, onMove, onDelete, onEdit }: KanbanColumnProps) {
+export function KanbanColumn({ title, status, tasks, showProject, availableTags, onMove, onDelete, onEdit }: KanbanColumnProps) {
+  const { t } = useTranslation();
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.currentTarget.classList.add('bg-accent/50');
@@ -25,8 +28,9 @@ export function KanbanColumn({ title, status, tasks, project, onMove, onDelete, 
     e.preventDefault();
     e.currentTarget.classList.remove('bg-accent/50');
     const taskId = parseInt(e.dataTransfer.getData('taskId'), 10);
-    if (taskId) {
-      onMove(taskId, status);
+    const project = e.dataTransfer.getData('project');
+    if (taskId && project) {
+      onMove(taskId, status, project);
     }
   };
 
@@ -36,6 +40,8 @@ export function KanbanColumn({ title, status, tasks, project, onMove, onDelete, 
         return 'border-t-blue-500';
       case 'doing':
         return 'border-t-yellow-500';
+      case 'review':
+        return 'border-t-purple-500';
       case 'done':
         return 'border-t-green-500';
     }
@@ -55,9 +61,10 @@ export function KanbanColumn({ title, status, tasks, project, onMove, onDelete, 
       >
         {tasks.map((task) => (
           <TaskCard
-            key={task.id}
+            key={`${task.project}-${task.id}`}
             task={task}
-            project={project}
+            showProject={showProject}
+            availableTags={availableTags}
             onMove={onMove}
             onDelete={onDelete}
             onEdit={onEdit}
@@ -65,7 +72,7 @@ export function KanbanColumn({ title, status, tasks, project, onMove, onDelete, 
         ))}
         {tasks.length === 0 && (
           <div className="text-center text-muted-foreground text-sm py-8">
-            No tasks
+            {t('noTasks')}
           </div>
         )}
       </div>

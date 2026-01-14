@@ -9,27 +9,32 @@ export interface Task {
   id: number;
   title: string;
   body: string;
-  status: 'todo' | 'doing' | 'done';
+  status: 'todo' | 'doing' | 'review' | 'done';
   dueAt?: number;
   tags: string[];
   createdAt: number;
   updatedAt: number;
   isOverdue: boolean;
+  project: string;
 }
 
 export interface KanbanData {
   projects: Project[];
   currentProject: string;
+  currentProjects: string[];
   todoTasks: Task[];
   doingTasks: Task[];
+  reviewTasks: Task[];
   doneTasks: Task[];
   tags: string[];
 }
 
 const API_BASE = '/api';
 
-export async function fetchKanban(project?: string): Promise<KanbanData> {
-  const params = project ? `?project=${encodeURIComponent(project)}` : '';
+export async function fetchKanban(projects?: string[]): Promise<KanbanData> {
+  const params = projects && projects.length > 0
+    ? '?' + projects.map(p => `project=${encodeURIComponent(p)}`).join('&')
+    : '';
   const res = await fetch(`${API_BASE}/kanban${params}`);
   if (!res.ok) throw new Error('Failed to fetch kanban data');
   return res.json();
@@ -44,6 +49,7 @@ export async function fetchProjects(): Promise<Project[]> {
 export interface CreateTaskParams {
   project: string;
   title: string;
+  body?: string;
   tags?: string[];
   dueAt?: string;
 }
@@ -61,6 +67,7 @@ export async function createTask(params: CreateTaskParams): Promise<Task> {
 export interface UpdateTaskParams {
   project: string;
   title?: string;
+  body?: string;
   tags?: string[];
   dueAt?: string;
 }
