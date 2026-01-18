@@ -1,0 +1,18 @@
+[Unit]
+Description=Mini Kanban Board
+
+[Service]
+Type=simple
+User=exedev
+Group=exedev
+WorkingDirectory=/home/exedev/mini-kanban
+ExecStart=/home/exedev/mini-kanban/mini-kanban -listen :8000
+Restart=always
+RestartSec=5
+Environment=HOME=/home/exedev
+Environment=USER=exedev
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
