@@ -11,6 +11,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { TaskEditDialog } from './TaskEditDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface TaskCardProps {
   task: Task;
@@ -24,6 +32,7 @@ interface TaskCardProps {
 export function TaskCard({ task, showProject, availableTags, onMove, onDelete, onEdit }: TaskCardProps) {
   const { t } = useTranslation();
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const formatDate = (unix: number) => {
     const date = new Date(unix * 1000);
@@ -100,11 +109,7 @@ export function TaskCard({ task, showProject, availableTags, onMove, onDelete, o
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   className="text-red-600"
-                  onClick={() => {
-                    if (confirm(t('deleteConfirm'))) {
-                      onDelete(task.id, task.project);
-                    }
-                  }}
+                  onClick={() => setDeleteConfirmOpen(true)}
                 >
                   {t('delete')}
                 </DropdownMenuItem>
@@ -133,6 +138,29 @@ export function TaskCard({ task, showProject, availableTags, onMove, onDelete, o
         onOpenChange={setEditOpen}
         onSave={onEdit}
       />
+      
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t('deleteConfirmTitle')}</DialogTitle>
+            <DialogDescription>{t('deleteConfirm')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                onDelete(task.id, task.project);
+                setDeleteConfirmOpen(false);
+              }}
+            >
+              {t('confirmDelete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

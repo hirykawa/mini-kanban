@@ -7,6 +7,7 @@ package dbgen
 
 import (
 	"context"
+	"strings"
 )
 
 const addTagToTask = `-- name: AddTagToTask :exec
@@ -48,7 +49,7 @@ func (q *Queries) CreateProject(ctx context.Context, name string) (Project, erro
 const createTask = `-- name: CreateTask :one
 INSERT INTO tasks (project_id, title, body, status, due_at)
 VALUES (?, ?, ?, ?, ?)
-RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at
+RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at, started_at
 `
 
 type CreateTaskParams struct {
@@ -78,6 +79,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DoneAt,
+		&i.StartedAt,
 	)
 	return i, err
 }
@@ -152,7 +154,7 @@ func (q *Queries) GetTagByName(ctx context.Context, name string) (Tag, error) {
 }
 
 const getTask = `-- name: GetTask :one
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.id = ? AND t.project_id = ?
@@ -173,6 +175,7 @@ type GetTaskRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -189,13 +192,14 @@ func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DoneAt,
+		&i.StartedAt,
 		&i.ProjectName,
 	)
 	return i, err
 }
 
 const listAllTasksGrouped = `-- name: ListAllTasksGrouped :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ?
@@ -214,6 +218,7 @@ type ListAllTasksGroupedRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -236,6 +241,7 @@ func (q *Queries) ListAllTasksGrouped(ctx context.Context, projectID int64) ([]L
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -252,7 +258,7 @@ func (q *Queries) ListAllTasksGrouped(ctx context.Context, projectID int64) ([]L
 }
 
 const listOverdueTasks = `-- name: ListOverdueTasks :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.status = 'todo' AND t.due_at < unixepoch()
@@ -269,6 +275,7 @@ type ListOverdueTasksRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -291,6 +298,7 @@ func (q *Queries) ListOverdueTasks(ctx context.Context, projectID int64) ([]List
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -363,8 +371,54 @@ func (q *Queries) ListTagsForTask(ctx context.Context, taskID int64) ([]Tag, err
 	return items, nil
 }
 
+const listTagsForTasks = `-- name: ListTagsForTasks :many
+SELECT tt.task_id, t.id, t.name FROM tags t
+JOIN task_tags tt ON t.id = tt.tag_id
+WHERE tt.task_id IN (/*SLICE:task_ids*/?)
+ORDER BY t.name
+`
+
+type ListTagsForTasksRow struct {
+	TaskID int64  `json:"task_id"`
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+}
+
+func (q *Queries) ListTagsForTasks(ctx context.Context, taskIds []int64) ([]ListTagsForTasksRow, error) {
+	query := listTagsForTasks
+	var queryParams []interface{}
+	if len(taskIds) > 0 {
+		for _, v := range taskIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:task_ids*/?", strings.Repeat(",?", len(taskIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:task_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTagsForTasksRow{}
+	for rows.Next() {
+		var i ListTagsForTasksRow
+		if err := rows.Scan(&i.TaskID, &i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTasks = `-- name: ListTasks :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ?
@@ -383,6 +437,7 @@ type ListTasksRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -405,6 +460,7 @@ func (q *Queries) ListTasks(ctx context.Context, projectID int64) ([]ListTasksRo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -421,7 +477,7 @@ func (q *Queries) ListTasks(ctx context.Context, projectID int64) ([]ListTasksRo
 }
 
 const listTasksByStatus = `-- name: ListTasksByStatus :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.status = ?
@@ -443,6 +499,7 @@ type ListTasksByStatusRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -465,6 +522,7 @@ func (q *Queries) ListTasksByStatus(ctx context.Context, arg ListTasksByStatusPa
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -481,7 +539,7 @@ func (q *Queries) ListTasksByStatus(ctx context.Context, arg ListTasksByStatusPa
 }
 
 const listTasksByTag = `-- name: ListTasksByTag :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 JOIN task_tags tt ON t.id = tt.task_id
@@ -505,6 +563,7 @@ type ListTasksByTagRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -527,6 +586,7 @@ func (q *Queries) ListTasksByTag(ctx context.Context, arg ListTasksByTagParams) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -543,7 +603,7 @@ func (q *Queries) ListTasksByTag(ctx context.Context, arg ListTasksByTagParams) 
 }
 
 const listTasksDoing = `-- name: ListTasksDoing :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.status = 'doing'
@@ -560,6 +620,7 @@ type ListTasksDoingRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -582,6 +643,7 @@ func (q *Queries) ListTasksDoing(ctx context.Context, projectID int64) ([]ListTa
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -598,7 +660,7 @@ func (q *Queries) ListTasksDoing(ctx context.Context, projectID int64) ([]ListTa
 }
 
 const listTasksDone = `-- name: ListTasksDone :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.status = 'done'
@@ -615,6 +677,7 @@ type ListTasksDoneRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -637,6 +700,7 @@ func (q *Queries) ListTasksDone(ctx context.Context, projectID int64) ([]ListTas
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -653,7 +717,7 @@ func (q *Queries) ListTasksDone(ctx context.Context, projectID int64) ([]ListTas
 }
 
 const listTasksOpen = `-- name: ListTasksOpen :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.status != 'done'
@@ -670,6 +734,7 @@ type ListTasksOpenRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -692,6 +757,7 @@ func (q *Queries) ListTasksOpen(ctx context.Context, projectID int64) ([]ListTas
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -708,7 +774,7 @@ func (q *Queries) ListTasksOpen(ctx context.Context, projectID int64) ([]ListTas
 }
 
 const listTasksReview = `-- name: ListTasksReview :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.status = 'review'
@@ -725,6 +791,7 @@ type ListTasksReviewRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -747,6 +814,7 @@ func (q *Queries) ListTasksReview(ctx context.Context, projectID int64) ([]ListT
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -763,7 +831,7 @@ func (q *Queries) ListTasksReview(ctx context.Context, projectID int64) ([]ListT
 }
 
 const listTasksTodo = `-- name: ListTasksTodo :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.status = 'todo'
@@ -780,6 +848,7 @@ type ListTasksTodoRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -802,6 +871,7 @@ func (q *Queries) ListTasksTodo(ctx context.Context, projectID int64) ([]ListTas
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -818,7 +888,7 @@ func (q *Queries) ListTasksTodo(ctx context.Context, projectID int64) ([]ListTas
 }
 
 const listTasksWithDue = `-- name: ListTasksWithDue :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ? AND t.due_at IS NOT NULL
@@ -835,6 +905,7 @@ type ListTasksWithDueRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -857,6 +928,7 @@ func (q *Queries) ListTasksWithDue(ctx context.Context, projectID int64) ([]List
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -878,7 +950,7 @@ UPDATE tasks SET
     done_at = unixepoch(),
     updated_at = unixepoch()
 WHERE id = ? AND project_id = ?
-RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at
+RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at, started_at
 `
 
 type MarkTaskDoneParams struct {
@@ -899,6 +971,7 @@ func (q *Queries) MarkTaskDone(ctx context.Context, arg MarkTaskDoneParams) (Tas
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DoneAt,
+		&i.StartedAt,
 	)
 	return i, err
 }
@@ -909,7 +982,7 @@ UPDATE tasks SET
     done_at = NULL,
     updated_at = unixepoch()
 WHERE id = ? AND project_id = ?
-RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at
+RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at, started_at
 `
 
 type MarkTaskOpenParams struct {
@@ -930,6 +1003,7 @@ func (q *Queries) MarkTaskOpen(ctx context.Context, arg MarkTaskOpenParams) (Tas
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DoneAt,
+		&i.StartedAt,
 	)
 	return i, err
 }
@@ -940,7 +1014,7 @@ UPDATE tasks SET
     done_at = NULL,
     updated_at = unixepoch()
 WHERE id = ? AND project_id = ?
-RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at
+RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at, started_at
 `
 
 type MarkTaskTodoParams struct {
@@ -961,6 +1035,7 @@ func (q *Queries) MarkTaskTodo(ctx context.Context, arg MarkTaskTodoParams) (Tas
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DoneAt,
+		&i.StartedAt,
 	)
 	return i, err
 }
@@ -989,7 +1064,7 @@ func (q *Queries) RemoveTagFromTask(ctx context.Context, arg RemoveTagFromTaskPa
 }
 
 const searchTasksLike = `-- name: SearchTasksLike :many
-SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, p.name as project_name
+SELECT t.id, t.project_id, t.title, t.body, t.status, t.due_at, t.created_at, t.updated_at, t.done_at, t.started_at, p.name as project_name
 FROM tasks t
 JOIN projects p ON t.project_id = p.id
 WHERE t.project_id = ?
@@ -1013,6 +1088,7 @@ type SearchTasksLikeRow struct {
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 	DoneAt      *int64 `json:"done_at"`
+	StartedAt   *int64 `json:"started_at"`
 	ProjectName string `json:"project_name"`
 }
 
@@ -1035,6 +1111,7 @@ func (q *Queries) SearchTasksLike(ctx context.Context, arg SearchTasksLikeParams
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DoneAt,
+			&i.StartedAt,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err
@@ -1101,7 +1178,7 @@ UPDATE tasks SET
     due_at = CASE WHEN ?3 = 1 THEN NULL ELSE COALESCE(?4, due_at) END,
     updated_at = unixepoch()
 WHERE id = ?5 AND project_id = ?6
-RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at
+RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at, started_at
 `
 
 type UpdateTaskParams struct {
@@ -1133,6 +1210,7 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DoneAt,
+		&i.StartedAt,
 	)
 	return i, err
 }
@@ -1140,10 +1218,11 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 const updateTaskStatus = `-- name: UpdateTaskStatus :one
 UPDATE tasks SET
     status = ?1,
+    started_at = CASE WHEN ?1 = 'doing' AND started_at IS NULL THEN unixepoch() ELSE started_at END,
     done_at = CASE WHEN ?1 = 'done' THEN unixepoch() ELSE NULL END,
     updated_at = unixepoch()
 WHERE id = ?2 AND project_id = ?3
-RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at
+RETURNING id, project_id, title, body, status, due_at, created_at, updated_at, done_at, started_at
 `
 
 type UpdateTaskStatusParams struct {
@@ -1165,6 +1244,7 @@ func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DoneAt,
+		&i.StartedAt,
 	)
 	return i, err
 }

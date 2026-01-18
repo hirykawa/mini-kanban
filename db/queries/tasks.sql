@@ -181,6 +181,7 @@ ORDER BY t.created_at DESC;
 -- name: UpdateTaskStatus :one
 UPDATE tasks SET
     status = sqlc.arg('status'),
+    started_at = CASE WHEN sqlc.arg('status') = 'doing' AND started_at IS NULL THEN unixepoch() ELSE started_at END,
     done_at = CASE WHEN sqlc.arg('status') = 'done' THEN unixepoch() ELSE NULL END,
     updated_at = unixepoch()
 WHERE id = sqlc.arg('id') AND project_id = sqlc.arg('project_id')
@@ -194,3 +195,9 @@ WHERE t.project_id = ?
 ORDER BY
     CASE t.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 WHEN 'review' THEN 2 WHEN 'done' THEN 3 END,
     t.created_at DESC;
+
+-- name: ListTagsForTasks :many
+SELECT tt.task_id, t.id, t.name FROM tags t
+JOIN task_tags tt ON t.id = tt.tag_id
+WHERE tt.task_id IN (sqlc.slice('task_ids'))
+ORDER BY t.name;

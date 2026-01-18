@@ -156,6 +156,28 @@ mini-kanban --lang en --help
 
 You can also set the `MINI_KANBAN_LANG` environment variable to permanently fix the language.
 
+### Project Configuration File
+
+You can place a `.mini-kanban.toml` file in your project root for project-specific settings.
+
+```toml
+[project]
+name = "my-project"
+
+[ai]
+context = "This project is a CLI tool written in Go"
+context_file = "docs/ai-context.md"
+```
+
+| Field | Description |
+|-------|-------------|
+| `project.name` | Project name (default value for `--project` flag) |
+| `ai.context` | Project context used for AI assist (inline) |
+| `ai.context_file` | Load context from an external file (relative path from `.mini-kanban.toml`, or absolute path) |
+
+> [!NOTE]
+> If both `context_file` and `context` are specified, `context_file` takes priority.
+
 ## Developer Information
 
 For build instructions, directory structure, and release procedures, see the [Developer Guide](docs/DEVELOPMENT.md).

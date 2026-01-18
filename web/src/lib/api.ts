@@ -96,3 +96,30 @@ export async function updateTaskStatus(id: number, project: string, status: stri
   });
   if (!res.ok) throw new Error('Failed to update task status');
 }
+
+// AI Assist API
+export interface AIAssistRequest {
+  title: string;
+  answers?: string[];
+  existingTags?: string[];
+  project: string;
+}
+
+export interface AIAssistResponse {
+  questions?: string[];
+  title?: string;
+  body?: string;
+  tags?: string[];
+  shouldAsk: boolean;
+  phase: 'skip' | 'questions' | 'result';
+}
+
+export async function aiAssist(params: AIAssistRequest): Promise<AIAssistResponse> {
+  const res = await fetch(`${API_BASE}/ai/assist`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error('Failed to get AI assist');
+  return res.json();
+}

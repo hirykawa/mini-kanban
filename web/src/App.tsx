@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { useTasks } from '@/hooks/useTasks';
 import { useSSE } from '@/hooks/useSSE';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Header } from '@/components/Header';
 import { KanbanBoard } from '@/components/KanbanBoard';
+import { ConfigDialog } from '@/components/ConfigDialog';
 
 function App() {
   const { t } = useTranslation();
+  const [configOpen, setConfigOpen] = useState(false);
   const {
     data,
     loading,
@@ -50,6 +53,7 @@ function App() {
           projects={data.projects}
           currentProjects={currentProjects}
           onProjectChange={switchProjects}
+          onSettingsClick={() => setConfigOpen(true)}
         />
         <main>
           <KanbanBoard
@@ -65,6 +69,7 @@ function App() {
           {t('footer')}
         </footer>
       </div>
+      <ConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
   );
 }
