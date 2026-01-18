@@ -50,6 +50,17 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
       - name: Get version
         id: version
         run: |
@@ -75,13 +86,15 @@ jobs:
         run: |
           mkdir -p npm-package
           
-          # バイナリをコピー
+          # バイナリとドキュメントをコピー
           cp dist/* npm-package/
+          cp README.md npm-package/
+          cp LICENSE npm-package/
           
           # プラットフォーム別の package.json を作成
           cat > npm-package/package.json << EOF
           {
-            "name": "@mini-kanban/${{ matrix.npm_os }}-${{ matrix.npm_cpu }}",
+            "name": "@hirykawa/mini-kanban-${{ matrix.npm_os }}-${{ matrix.npm_cpu }}",
             "version": "${{ steps.version.outputs.VERSION }}",
             "description": "Mini-Kanban binary for ${{ matrix.npm_os }} ${{ matrix.npm_cpu }}",
             "os": ["${{ matrix.npm_os }}"],
@@ -143,10 +156,14 @@ jobs:
         run: |
           mkdir -p main-package/bin
           
+          # ドキュメントをコピー
+          cp README.md main-package/
+          cp LICENSE main-package/
+          
           # メインの package.json を作成
           cat > main-package/package.json << 'EOF'
           {
-            "name": "mini-kanban",
+            "name": "@hirykawa/mini-kanban",
             "version": "${{ steps.version.outputs.VERSION }}",
             "description": "軽量・高速なタスク管理 CLI およびローカル Web アプリケーション",
             "bin": {
@@ -154,11 +171,11 @@ jobs:
               "minikanban": "./bin/mini-kanban.js"
             },
             "optionalDependencies": {
-              "@mini-kanban/linux-x64": "${{ steps.version.outputs.VERSION }}",
-              "@mini-kanban/linux-arm64": "${{ steps.version.outputs.VERSION }}",
-              "@mini-kanban/darwin-x64": "${{ steps.version.outputs.VERSION }}",
-              "@mini-kanban/darwin-arm64": "${{ steps.version.outputs.VERSION }}",
-              "@mini-kanban/win32-x64": "${{ steps.version.outputs.VERSION }}"
+              "@hirykawa/mini-kanban-linux-x64": "${{ steps.version.outputs.VERSION }}",
+              "@hirykawa/mini-kanban-linux-arm64": "${{ steps.version.outputs.VERSION }}",
+              "@hirykawa/mini-kanban-darwin-x64": "${{ steps.version.outputs.VERSION }}",
+              "@hirykawa/mini-kanban-darwin-arm64": "${{ steps.version.outputs.VERSION }}",
+              "@hirykawa/mini-kanban-win32-x64": "${{ steps.version.outputs.VERSION }}"
             },
             "repository": {
               "type": "git",
@@ -200,7 +217,7 @@ jobs:
               process.exit(1);
             }
             
-            const packageName = `@mini-kanban/${npmPlatform}-${npmArch}`;
+            const packageName = `@hirykawa/mini-kanban-${npmPlatform}-${npmArch}`;
             const binaryName = platform === 'win32' ? 'mini-kanban.exe' : 'mini-kanban';
             
             try {
@@ -208,7 +225,7 @@ jobs:
               return path.join(path.dirname(packagePath), binaryName);
             } catch (e) {
               console.error(`Platform package not found: ${packageName}`);
-              console.error('Please install mini-kanban with npm install -g mini-kanban');
+              console.error('Please install @hirykawa/mini-kanban with npm install -g @hirykawa/mini-kanban');
               process.exit(1);
             }
           }
