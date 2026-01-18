@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"sync"
-	"time"
 
 	"mini-kanban/db"
 	"mini-kanban/web"
@@ -50,7 +49,10 @@ func New(dbPath, defaultProject string, devMode bool) (*Server, error) {
 func (s *Server) Serve(addr string) error {
 	mux := http.NewServeMux()
 
-	// JSON API for React frontend
+	// JSON API for React frontend (most specific patterns first)
+	mux.HandleFunc("GET /api/config", corsMiddleware(s.handleAPIGetConfig))
+	mux.HandleFunc("PUT /api/config", corsMiddleware(s.handleAPIUpdateConfig))
+	mux.HandleFunc("OPTIONS /api/config", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
 	mux.HandleFunc("GET /api/projects", corsMiddleware(s.handleAPIProjects))
 	mux.HandleFunc("GET /api/kanban", corsMiddleware(s.handleAPIKanban))
 	mux.HandleFunc("POST /api/tasks", corsMiddleware(s.handleAPICreateTask))
@@ -60,6 +62,10 @@ func (s *Server) Serve(addr string) error {
 	mux.HandleFunc("OPTIONS /api/tasks", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
 	mux.HandleFunc("OPTIONS /api/tasks/{id}", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
 	mux.HandleFunc("OPTIONS /api/tasks/{id}/status", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
+
+	// AI assist API
+	mux.HandleFunc("POST /api/ai/assist", corsMiddleware(s.handleAPIAIAssist))
+	mux.HandleFunc("OPTIONS /api/ai/assist", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
 
 	// SSE for real-time updates
 	mux.HandleFunc("GET /events", s.handleEvents)
@@ -145,19 +151,4 @@ func (s *Server) broadcast(msg string) {
 func (s *Server) handleNotify(w http.ResponseWriter, r *http.Request) {
 	s.broadcast("reload")
 	w.WriteHeader(http.StatusOK)
-}
-
-func parseDateTimeWeb(s string) (time.Time, error) {
-	loc := time.Local
-	formats := []string{
-		"2006-01-02T15:04",
-		"2006-01-02 15:04",
-		"2006-01-02",
-	}
-	for _, f := range formats {
-		if t, err := time.ParseInLocation(f, s, loc); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse date: %s", s)
 }

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from '@/hooks/useTranslation';
-import type { Task } from '@/lib/api';
+import type { Task, AIAssistResponse } from '@/lib/api';
+import { aiAssist } from '@/lib/api';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TagInput } from '@/components/ui/tag-input';
 import { cn } from "@/lib/utils";
+import { AIAssistDialog } from './AIAssistDialog';
 
 interface TaskEditDialogProps {
   task: Task;
@@ -23,7 +25,7 @@ interface TaskEditDialogProps {
   onSave: (taskId: number, updates: { title?: string; body?: string; tags?: string[]; dueAt?: string }) => void;
 }
 
-export function TaskEditDialog({ task, availableTags = [], open, onOpenChange, onSave }: TaskEditDialogProps) {
+export function TaskEditDialog({ task, project, availableTags = [], open, onOpenChange, onSave }: TaskEditDialogProps) {
   const { t } = useTranslation();
   const [title, setTitle] = useState(task.title);
   const [body, setBody] = useState(task.body || '');
@@ -34,6 +36,9 @@ export function TaskEditDialog({ task, availableTags = [], open, onOpenChange, o
     return date.toISOString().split('T')[0];
   });
   const [isPreview, setIsPreview] = useState(false);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [pendingTitle, setPendingTitle] = useState('');
+  const [initialQuestions, setInitialQuestions] = useState<AIAssistResponse | null>(null);
 
   const handleSave = () => {
     onSave(task.id, {
@@ -45,6 +50,44 @@ export function TaskEditDialog({ task, availableTags = [], open, onOpenChange, o
     onOpenChange(false);
   };
 
+  const handleAIAssist = async () => {
+    if (!title.trim()) return;
+    const trimmedTitle = title.trim();
+    setPendingTitle(trimmedTitle);
+    
+    try {
+      const response = await aiAssist({
+        title: trimmedTitle,
+        project,
+        existingTags: availableTags,
+      });
+      
+      // If AI says skip, don't open dialog
+      if (response.phase === 'skip' || !response.questions || response.questions.length === 0) {
+        return;
+      }
+      
+      // Has questions, open dialog with pre-fetched data
+      setInitialQuestions(response);
+      setAiDialogOpen(true);
+    } catch {
+      // On error, do nothing
+    }
+  };
+
+  const handleAIConfirm = (result: { title: string; body: string; tags: string[] }) => {
+    setTitle(result.title);
+    setBody(result.body);
+    // Merge AI suggested tags with existing tags
+    const mergedTags = [...new Set([...tags, ...result.tags])];
+    setTags(mergedTags);
+    setAiDialogOpen(false);
+  };
+
+  const handleAISkip = () => {
+    setAiDialogOpen(false);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
@@ -53,7 +96,17 @@ export function TaskEditDialog({ task, availableTags = [], open, onOpenChange, o
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t('title')}</label>
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-medium">{t('title')}</label>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleAIAssist}
+                className="h-6 text-xs"
+              >
+                🤖 {t('enableAIAssist')}
+              </Button>
+            </div>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -137,6 +190,20 @@ export function TaskEditDialog({ task, availableTags = [], open, onOpenChange, o
           <Button onClick={handleSave}>{t('save')}</Button>
         </DialogFooter>
       </DialogContent>
+
+      <AIAssistDialog
+        open={aiDialogOpen}
+        onOpenChange={(open) => {
+          setAiDialogOpen(open);
+          if (!open) setInitialQuestions(null);
+        }}
+        title={pendingTitle}
+        project={project}
+        existingTags={availableTags}
+        initialQuestions={initialQuestions}
+        onConfirm={handleAIConfirm}
+        onSkip={handleAISkip}
+      />
     </Dialog>
   );
 }

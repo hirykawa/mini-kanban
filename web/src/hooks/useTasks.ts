@@ -31,11 +31,11 @@ export function useTasks(initialProjects?: string[]) {
   // For single project operations, use the first selected project
   const primaryProject = currentProjects[0] || '';
 
-  const addTask = useCallback(async (title: string, tags?: string[], dueAt?: string, project?: string) => {
+  const addTask = useCallback(async (title: string, tags?: string[], dueAt?: string, project?: string, body?: string) => {
     const targetProject = project || primaryProject || data?.currentProject;
     if (!targetProject) return;
     try {
-      await createTask({ project: targetProject, title, tags, dueAt });
+      await createTask({ project: targetProject, title, tags, dueAt, body });
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create task');

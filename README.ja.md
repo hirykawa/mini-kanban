@@ -156,6 +156,28 @@ mini-kanban --lang en --help
 
 環境変数 `MINI_KANBAN_LANG` を設定することで、永続的に言語を固定することも可能です。
 
+### プロジェクト設定ファイル
+
+プロジェクトルートに `.mini-kanban.toml` を配置することで、プロジェクト固有の設定が可能です。
+
+```toml
+[project]
+name = "my-project"
+
+[ai]
+context = "このプロジェクトはGoで書かれたCLIツールです"
+context_file = "docs/ai-context.md"
+```
+
+| 項目 | 説明 |
+|------|------|
+| `project.name` | プロジェクト名（`--project` フラグのデフォルト値） |
+| `ai.context` | AI アシスト時に使用するプロジェクトコンテキスト（インライン） |
+| `ai.context_file` | コンテキストを外部ファイルから読み込む（`.mini-kanban.toml` からの相対パス、または絶対パス） |
+
+> [!NOTE]
+> `context_file` と `context` の両方が指定された場合、`context_file` が優先されます。
+
 ## 開発者向け情報
 
 ビルド方法、ディレクトリ構成、リリース手順などは [開発者ガイド](docs/DEVELOPMENT.md) を参照してください。

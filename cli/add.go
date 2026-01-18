@@ -1,14 +1,14 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"strings"
-	"time"
-	"mini-kanban/ai"
+
 	"github.com/spf13/cobra"
 
+	"mini-kanban/ai"
 	"mini-kanban/db/dbgen"
+	"mini-kanban/util"
 )
 
 var addCmd = &cobra.Command{
@@ -20,11 +20,11 @@ var addCmd = &cobra.Command{
 }
 
 var (
-	addBody  string
-	addTags  []string
-	addDue   string
-	addAI    bool
-	addNoAI  bool
+	addBody string
+	addTags []string
+	addDue  string
+	addAI   bool
+	addNoAI bool
 )
 
 func init() {
@@ -42,22 +42,18 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("title is required")
 	}
 
-	database, err := getDB()
+	cc, err := NewCmdContext()
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	defer cc.Close()
 
-	q := dbgen.New(database)
-	projectID, projectName, err := getProjectID(q)
-	if err != nil {
-		return err
-	}
+	ctx := cc.Context()
 
 	// Parse due date
 	var dueAt *int64
 	if addDue != "" {
-		t, err := parseDateTime(addDue)
+		t, err := util.ParseDateTime(addDue)
 		if err != nil {
 			return fmt.Errorf("invalid due date: %w", err)
 		}
@@ -70,9 +66,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if !addNoAI && !shouldAI {
 		_, cfg, err := getAIProvider()
 		if err == nil && strings.ToLower(cfg.AI.Mode) == "auto" {
-			if ai.ShouldAssist(title) {
-				shouldAI = true
-			}
+			shouldAI = true
 		}
 	}
 
@@ -82,9 +76,9 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		projectContext, _, _ := getProjectAIContext()
-		
+
 		fmt.Printf("🤖 AI assist is starting for: %s\n", title)
-		result, err := ai.Assist(context.Background(), provider, title, nil, projectContext, cfg.AI.MaxQuestions)
+		result, err := ai.Assist(ctx, provider, title, nil, projectContext, cfg.AI.MaxQuestions)
 		if err != nil {
 			return fmt.Errorf("ai assist: %w", err)
 		}
@@ -105,8 +99,8 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	allTags := parseTags(addTags)
 
 	// Create task
-	task, err := q.CreateTask(context.Background(), dbgen.CreateTaskParams{
-		ProjectID: projectID,
+	task, err := cc.Queries.CreateTask(ctx, dbgen.CreateTaskParams{
+		ProjectID: cc.ProjectID,
 		Title:     title,
 		Body:      addBody,
 		Status:    "open",
@@ -118,11 +112,11 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 	// Add tags
 	for _, tagName := range allTags {
-		tag, err := q.GetOrCreateTag(context.Background(), tagName)
+		tag, err := cc.Queries.GetOrCreateTag(ctx, tagName)
 		if err != nil {
 			return fmt.Errorf("create tag %q: %w", tagName, err)
 		}
-		if err := q.AddTagToTask(context.Background(), dbgen.AddTagToTaskParams{
+		if err := cc.Queries.AddTagToTask(ctx, dbgen.AddTagToTaskParams{
 			TaskID: task.ID,
 			TagID:  tag.ID,
 		}); err != nil {
@@ -130,23 +124,8 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Printf("Created task #%d in project %q: %s\n", task.ID, projectName, task.Title)
+	fmt.Printf("Created task #%d in project %q: %s\n", task.ID, cc.ProjectName, task.Title)
 	return nil
-}
-
-// parseDateTime parses a date/datetime string in local timezone.
-func parseDateTime(s string) (time.Time, error) {
-	loc := time.Local
-	formats := []string{
-		"2006-01-02 15:04",
-		"2006-01-02",
-	}
-	for _, f := range formats {
-		if t, err := time.ParseInLocation(f, s, loc); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse %q (use YYYY-MM-DD or YYYY-MM-DD HH:MM)", s)
 }
 
 // parseTags normalizes tag input (supports comma-separated and trims whitespace).

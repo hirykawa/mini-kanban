@@ -5,8 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -15,8 +16,6 @@ import (
 	"mini-kanban/db"
 	"mini-kanban/db/dbgen"
 	"mini-kanban/i18n"
-	"net/http"
-	"time"
 )
 
 var (
@@ -182,35 +181,7 @@ func getProjectID(q *dbgen.Queries) (int64, string, error) {
 
 // getAIProvider returns the configured AI provider.
 func getAIProvider() (ai.Provider, config.Config, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, cfg, fmt.Errorf("load config: %w", err)
-	}
-
-	aiCfg := ai.Config{
-		Provider:  cfg.LLM.Provider,
-		Model:     cfg.LLM.Model,
-		APIKey:    "",
-		ProjectID: cfg.Vertex.ProjectID,
-		Location:  cfg.Vertex.Location,
-	}
-
-	// Set API key based on provider
-	switch strings.ToLower(cfg.LLM.Provider) {
-	case "openai":
-		aiCfg.APIKey = cfg.OpenAI.APIKey
-	case "anthropic":
-		aiCfg.APIKey = cfg.Anthropic.APIKey
-	case "gemini":
-		aiCfg.APIKey = cfg.Gemini.APIKey
-	}
-
-	provider, err := ai.NewProvider(aiCfg)
-	if err != nil {
-		return nil, cfg, fmt.Errorf("new ai provider: %w", err)
-	}
-
-	return provider, cfg, nil
+	return ai.NewProviderFromConfig()
 }
 
 // getProjectAIContext returns the AI context and project config for the current project.

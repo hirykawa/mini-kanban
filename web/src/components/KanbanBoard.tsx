@@ -6,7 +6,7 @@ import { TaskForm } from './TaskForm';
 interface KanbanBoardProps {
   data: KanbanData;
   isMultiProject: boolean;
-  onAddTask: (title: string, tags?: string[], dueAt?: string, project?: string) => void;
+  onAddTask: (title: string, tags?: string[], dueAt?: string, project?: string, body?: string) => void;
   onMoveTask: (taskId: number, newStatus: Task['status'], project: string) => void;
   onDeleteTask: (taskId: number, project: string) => void;
   onEditTask: (taskId: number, updates: { title?: string; body?: string; tags?: string[]; dueAt?: string; project?: string }) => void;

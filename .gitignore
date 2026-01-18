@@ -32,3 +32,6 @@ dist-ssr
 .agent/
 .opencode/
 main
+docs/plan/*
+
+tmp

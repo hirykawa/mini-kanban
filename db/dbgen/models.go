@@ -61,6 +61,7 @@ type Task struct {
 	CreatedAt int64  `json:"created_at"`
 	UpdatedAt int64  `json:"updated_at"`
 	DoneAt    *int64 `json:"done_at"`
+	StartedAt *int64 `json:"started_at"`
 }
 
 type TaskTag struct {

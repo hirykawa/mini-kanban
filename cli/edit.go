@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 
@@ -9,6 +8,7 @@ import (
 
 	"mini-kanban/ai"
 	"mini-kanban/db/dbgen"
+	"mini-kanban/util"
 )
 
 var editCmd = &cobra.Command{
@@ -20,13 +20,13 @@ var editCmd = &cobra.Command{
 }
 
 var (
-	editTitle string
-	editBody  string
-	editTags  []string
-	editDue   string
+	editTitle  string
+	editBody   string
+	editTags   []string
+	editDue    string
 	editStatus string
-	editAI    bool
-	editNoAI  bool
+	editAI     bool
+	editNoAI   bool
 )
 
 func init() {
@@ -46,24 +46,18 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	database, err := getDB()
+	cc, err := NewCmdContext()
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	defer cc.Close()
 
-	q := dbgen.New(database)
-	projectID, _, err := getProjectID(q)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
+	ctx := cc.Context()
 
 	// Verify task exists
-	_, err = q.GetTask(ctx, dbgen.GetTaskParams{
+	_, err = cc.Queries.GetTask(ctx, dbgen.GetTaskParams{
 		ID:        id,
-		ProjectID: projectID,
+		ProjectID: cc.ProjectID,
 	})
 	if err != nil {
 		return fmt.Errorf("task #%d not found", id)
@@ -72,7 +66,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	// Build update params
 	params := dbgen.UpdateTaskParams{
 		ID:        id,
-		ProjectID: projectID,
+		ProjectID: cc.ProjectID,
 	}
 
 	if editTitle != "" {
@@ -85,7 +79,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		clearDue := int64(1)
 		params.ClearDue = &clearDue
 	} else if editDue != "" {
-		t, err := parseDateTime(editDue)
+		t, err := util.ParseDateTime(editDue)
 		if err != nil {
 			return fmt.Errorf("invalid due date: %w", err)
 		}
@@ -102,9 +96,9 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		projectContext, _, _ := getProjectAIContext()
 
 		// Get current task for context
-		currentTask, err := q.GetTask(ctx, dbgen.GetTaskParams{
+		currentTask, err := cc.Queries.GetTask(ctx, dbgen.GetTaskParams{
 			ID:        id,
-			ProjectID: projectID,
+			ProjectID: cc.ProjectID,
 		})
 		if err != nil {
 			return fmt.Errorf("get task for context: %w", err)
@@ -114,7 +108,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		if title == "" {
 			title = currentTask.Title
 		}
-		
+
 		fmt.Printf("🤖 AI assist is starting for task #%d: %s\n", id, title)
 		result, err := ai.Assist(ctx, provider, title, nil, projectContext, cfg.AI.MaxQuestions)
 		if err != nil {
@@ -130,22 +124,22 @@ func runEdit(cmd *cobra.Command, args []string) error {
 			editTitle = result.Title
 			editBody = result.Body
 			editTags = append(editTags, result.Tags...)
-			
+
 			// Force update params
 			params.Title = &editTitle
 			params.Body = &editBody
 		}
 	}
 
-	task, err := q.UpdateTask(ctx, params)
+	task, err := cc.Queries.UpdateTask(ctx, params)
 	if err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
 
 	if editStatus != "" {
-		task, err = q.UpdateTaskStatus(ctx, dbgen.UpdateTaskStatusParams{
+		task, err = cc.Queries.UpdateTaskStatus(ctx, dbgen.UpdateTaskStatusParams{
 			ID:        id,
-			ProjectID: projectID,
+			ProjectID: cc.ProjectID,
 			Status:    editStatus,
 		})
 		if err != nil {
@@ -156,18 +150,18 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	// Handle tags if specified
 	if cmd.Flags().Changed("tag") {
 		// Remove all existing tags
-		if err := q.RemoveAllTagsFromTask(ctx, id); err != nil {
+		if err := cc.Queries.RemoveAllTagsFromTask(ctx, id); err != nil {
 			return fmt.Errorf("remove tags: %w", err)
 		}
 
 		// Add new tags
 		allTags := parseTags(editTags)
 		for _, tagName := range allTags {
-			tag, err := q.GetOrCreateTag(ctx, tagName)
+			tag, err := cc.Queries.GetOrCreateTag(ctx, tagName)
 			if err != nil {
 				return fmt.Errorf("create tag %q: %w", tagName, err)
 			}
-			if err := q.AddTagToTask(ctx, dbgen.AddTagToTaskParams{
+			if err := cc.Queries.AddTagToTask(ctx, dbgen.AddTagToTaskParams{
 				TaskID: id,
 				TagID:  tag.ID,
 			}); err != nil {

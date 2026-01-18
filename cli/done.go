@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -23,22 +22,15 @@ func runDone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	database, err := getDB()
+	cc, err := NewCmdContext()
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	defer cc.Close()
 
-	q := dbgen.New(database)
-	projectID, _, err := getProjectID(q)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-	task, err := q.MarkTaskDone(ctx, dbgen.MarkTaskDoneParams{
+	task, err := cc.Queries.MarkTaskDone(cc.Context(), dbgen.MarkTaskDoneParams{
 		ID:        id,
-		ProjectID: projectID,
+		ProjectID: cc.ProjectID,
 	})
 	if err != nil {
 		return fmt.Errorf("mark task done: %w", err)
@@ -62,22 +54,15 @@ func runUndo(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	database, err := getDB()
+	cc, err := NewCmdContext()
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	defer cc.Close()
 
-	q := dbgen.New(database)
-	projectID, _, err := getProjectID(q)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-	task, err := q.MarkTaskOpen(ctx, dbgen.MarkTaskOpenParams{
+	task, err := cc.Queries.MarkTaskOpen(cc.Context(), dbgen.MarkTaskOpenParams{
 		ID:        id,
-		ProjectID: projectID,
+		ProjectID: cc.ProjectID,
 	})
 	if err != nil {
 		return fmt.Errorf("mark task open: %w", err)
@@ -101,32 +86,26 @@ func runRm(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	database, err := getDB()
+	cc, err := NewCmdContext()
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	defer cc.Close()
 
-	q := dbgen.New(database)
-	projectID, _, err := getProjectID(q)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
+	ctx := cc.Context()
 
 	// Get task first to show title
-	task, err := q.GetTask(ctx, dbgen.GetTaskParams{
+	task, err := cc.Queries.GetTask(ctx, dbgen.GetTaskParams{
 		ID:        id,
-		ProjectID: projectID,
+		ProjectID: cc.ProjectID,
 	})
 	if err != nil {
 		return fmt.Errorf("task #%d not found", id)
 	}
 
-	if err := q.DeleteTask(ctx, dbgen.DeleteTaskParams{
+	if err := cc.Queries.DeleteTask(ctx, dbgen.DeleteTaskParams{
 		ID:        id,
-		ProjectID: projectID,
+		ProjectID: cc.ProjectID,
 	}); err != nil {
 		return fmt.Errorf("delete task: %w", err)
 	}

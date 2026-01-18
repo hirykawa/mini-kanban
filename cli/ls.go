@@ -13,6 +13,7 @@ import (
 
 	"mini-kanban/db"
 	"mini-kanban/db/dbgen"
+	"mini-kanban/model"
 	"mini-kanban/search"
 )
 
@@ -24,13 +25,13 @@ var lsCmd = &cobra.Command{
 }
 
 var (
-	lsOpen   bool
-	lsDone   bool
-	lsTags   []string
-	lsQuery  string
-	lsSort   string
-	lsLimit  int
-	lsJSON   bool
+	lsOpen  bool
+	lsDone  bool
+	lsTags  []string
+	lsQuery string
+	lsSort  string
+	lsLimit int
+	lsJSON  bool
 )
 
 func init() {
@@ -44,26 +45,20 @@ func init() {
 }
 
 func runLs(cmd *cobra.Command, args []string) error {
-	database, err := getDB()
+	cc, err := NewCmdContext()
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	defer cc.Close()
 
-	q := dbgen.New(database)
-	projectID, _, err := getProjectID(q)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
+	ctx := cc.Context()
 
 	// Determine status filter
 	var tasks []dbgen.ListTasksRow
-	
+
 	// Default: show open only unless --done specified
 	if lsDone && !lsOpen {
-		rows, err := q.ListTasksDone(ctx, projectID)
+		rows, err := cc.Queries.ListTasksDone(ctx, cc.ProjectID)
 		if err != nil {
 			return fmt.Errorf("list done tasks: %w", err)
 		}
@@ -72,7 +67,7 @@ func runLs(cmd *cobra.Command, args []string) error {
 		}
 	} else if lsOpen || (!lsOpen && !lsDone) {
 		// Default to open
-		rows, err := q.ListTasksOpen(ctx, projectID)
+		rows, err := cc.Queries.ListTasksOpen(ctx, cc.ProjectID)
 		if err != nil {
 			return fmt.Errorf("list open tasks: %w", err)
 		}
@@ -84,13 +79,13 @@ func runLs(cmd *cobra.Command, args []string) error {
 	// Apply search if query provided
 	if lsQuery != "" {
 		parsed := search.ParseQuery(lsQuery)
-		
+
 		// If free text, do FTS or LIKE search
 		if parsed.FreeText != "" {
 			if search.ShouldUseLike(parsed.FreeText) {
 				searchText := parsed.FreeText
-				rows, err := q.SearchTasksLike(ctx, dbgen.SearchTasksLikeParams{
-					ProjectID: projectID,
+				rows, err := cc.Queries.SearchTasksLike(ctx, dbgen.SearchTasksLikeParams{
+					ProjectID: cc.ProjectID,
 					Column2:   &searchText,
 					Column3:   &searchText,
 				})
@@ -99,7 +94,7 @@ func runLs(cmd *cobra.Command, args []string) error {
 				}
 				tasks = filterBySearchLike(tasks, rows)
 			} else {
-				rows, err := db.SearchTasksFTS(ctx, database, projectID, parsed.FreeText)
+				rows, err := db.SearchTasksFTS(ctx, cc.DB, cc.ProjectID, parsed.FreeText)
 				if err != nil {
 					return fmt.Errorf("search (fts): %w", err)
 				}
@@ -126,7 +121,7 @@ func runLs(cmd *cobra.Command, args []string) error {
 
 	// Filter by tags
 	if len(lsTags) > 0 {
-		tasks, err = filterByTags(q, tasks, lsTags)
+		tasks, err = filterByTags(cc.Queries, tasks, lsTags)
 		if err != nil {
 			return err
 		}
@@ -139,9 +134,9 @@ func runLs(cmd *cobra.Command, args []string) error {
 
 	// Output
 	if lsJSON {
-		return outputJSON(q, tasks)
+		return outputJSON(cc.Queries, tasks)
 	}
-	return outputTable(q, tasks)
+	return outputTable(cc.Queries, tasks)
 }
 
 func filterBySearchLike(current []dbgen.ListTasksRow, searchResults []dbgen.SearchTasksLikeRow) []dbgen.ListTasksRow {
@@ -205,27 +200,34 @@ func filterByTags(q *dbgen.Queries, tasks []dbgen.ListTasksRow, tags []string) (
 }
 
 type taskOutput struct {
-	ID          int64    `json:"id"`
-	Project     string   `json:"project"`
-	Status      string   `json:"status"`
-	Title       string   `json:"title"`
-	Body        string   `json:"body,omitempty"`
-	Tags        []string `json:"tags"`
-	DueAt       *string  `json:"due_at,omitempty"`
-	CreatedAt   string   `json:"created_at"`
-	UpdatedAt   string   `json:"updated_at"`
-	DoneAt      *string  `json:"done_at,omitempty"`
+	ID        int64    `json:"id"`
+	Project   string   `json:"project"`
+	Status    string   `json:"status"`
+	Title     string   `json:"title"`
+	Body      string   `json:"body,omitempty"`
+	Tags      []string `json:"tags"`
+	DueAt     *string  `json:"dueAt,omitempty"`
+	CreatedAt string   `json:"createdAt"`
+	UpdatedAt string   `json:"updatedAt"`
+	StartedAt *string  `json:"startedAt,omitempty"`
+	DoneAt    *string  `json:"doneAt,omitempty"`
 }
 
 func outputJSON(q *dbgen.Queries, tasks []dbgen.ListTasksRow) error {
 	ctx := context.Background()
 	enc := json.NewEncoder(os.Stdout)
 
+	// Batch fetch all tags for tasks
+	taskIDs := make([]int64, len(tasks))
+	for i, t := range tasks {
+		taskIDs[i] = t.ID
+	}
+	tagMap, _ := db.GetTagsForTasks(ctx, q, taskIDs)
+
 	for _, t := range tasks {
-		tags, _ := q.ListTagsForTask(ctx, t.ID)
-		tagNames := make([]string, len(tags))
-		for i, tag := range tags {
-			tagNames[i] = tag.Name
+		tagNames := tagMap[t.ID]
+		if tagNames == nil {
+			tagNames = []string{}
 		}
 
 		out := taskOutput{
@@ -242,6 +244,10 @@ func outputJSON(q *dbgen.Queries, tasks []dbgen.ListTasksRow) error {
 			s := formatUnix(*t.DueAt)
 			out.DueAt = &s
 		}
+		if t.StartedAt != nil {
+			s := formatUnix(*t.StartedAt)
+			out.StartedAt = &s
+		}
 		if t.DoneAt != nil {
 			s := formatUnix(*t.DoneAt)
 			out.DoneAt = &s
@@ -257,11 +263,17 @@ func outputTable(q *dbgen.Queries, tasks []dbgen.ListTasksRow) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tSTATUS\tDUE\tTITLE\tTAGS")
 
+	// Batch fetch all tags for tasks
+	taskIDs := make([]int64, len(tasks))
+	for i, t := range tasks {
+		taskIDs[i] = t.ID
+	}
+	tagMap, _ := db.GetTagsForTasks(ctx, q, taskIDs)
+
 	for _, t := range tasks {
-		tags, _ := q.ListTagsForTask(ctx, t.ID)
-		tagNames := make([]string, len(tags))
-		for i, tag := range tags {
-			tagNames[i] = tag.Name
+		tagNames := tagMap[t.ID]
+		if tagNames == nil {
+			tagNames = []string{}
 		}
 
 		due := "-"
@@ -270,7 +282,7 @@ func outputTable(q *dbgen.Queries, tasks []dbgen.ListTasksRow) error {
 		}
 
 		status := "○"
-		if t.Status == "done" {
+		if t.Status == model.StatusDone.String() {
 			status = "✓"
 		}
 

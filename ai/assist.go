@@ -6,17 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 )
-
-// AmbiguousPatterns are patterns that trigger AI assist.
-var AmbiguousPatterns = []string{
-	"考慮", "対応", "いい感じ", "最適化", "できるように", "サポート",
-	"場合", "または", "どっち", "両方",
-	"consider", "handle", "optimize", "support",
-	"if", "or", "either", "both",
-}
 
 // AssistResult contains the AI-enhanced task data.
 type AssistResult struct {
@@ -25,21 +16,6 @@ type AssistResult struct {
 	Tags     []string // Suggested tags
 	Skipped  bool     // True if AI assist was skipped
 	Canceled bool     // True if user canceled
-}
-
-// ShouldAssist determines if AI assist should be triggered based on title.
-func ShouldAssist(title string) bool {
-	lower := strings.ToLower(title)
-	for _, pattern := range AmbiguousPatterns {
-		if strings.Contains(lower, strings.ToLower(pattern)) {
-			return true
-		}
-	}
-	// Also trigger if title is very short
-	if len(strings.TrimSpace(title)) < 10 {
-		return true
-	}
-	return false
 }
 
 // Assist runs the AI assist flow for task creation.
@@ -53,9 +29,9 @@ func Assist(ctx context.Context, provider Provider, title string, existingTags [
 
 	// Initial analysis
 	analysisPrompt := buildAnalysisPrompt(title, existingTags)
-	
+
 	opts := GenerateOptions{
-		MaxTokens:    1024,
+		MaxTokens:    0, // unlimited
 		Temperature:  0.7,
 		SystemPrompt: systemPrompt,
 	}
@@ -72,7 +48,7 @@ func Assist(ctx context.Context, provider Provider, title string, existingTags [
 	reader := bufio.NewReader(os.Stdin)
 	var conversation []string
 	conversation = append(conversation, fmt.Sprintf("Task: %s", title))
-	
+
 	questionsAsked := 0
 	for _, q := range parsed.Questions {
 		if questionsAsked >= maxQuestions {
@@ -121,7 +97,7 @@ func Assist(ctx context.Context, provider Provider, title string, existingTags [
 	fmt.Print("\nSave this task? [y/n]: ")
 	confirm, _ := reader.ReadString('\n')
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
-	
+
 	if confirm != "y" && confirm != "yes" {
 		result.Canceled = true
 	}
@@ -151,7 +127,7 @@ func buildAnalysisPrompt(title string, existingTags []string) string {
 	if len(existingTags) > 0 {
 		tagsStr = strings.Join(existingTags, ", ")
 	}
-	
+
 	return fmt.Sprintf(`Analyze this task and identify what clarification is needed.
 
 Task: "%s"
@@ -195,18 +171,19 @@ Rules:
 - Use existing tags when applicable, minimize new tags
 - Body uses lightweight template format
 - Keep メモ to 3-7 bullet points
-- Keep 受け入れ条件 to 3-6 items`, strings.Join(conversation, "\n\n"), tagsStr)
+- Keep 受け入れ条件 to 3-6 items
+- IMPORTANT: Escape all newlines in JSON strings with \n`, strings.Join(conversation, "\n\n"), tagsStr)
 }
 
 type analysisResponse struct {
-	Questions      []string `json:"questions"`
-	InitialThoughts string  `json:"initial_thoughts"`
+	Questions       []string `json:"questions"`
+	InitialThoughts string   `json:"initial_thoughts"`
 }
 
 func parseAIResponse(response string) analysisResponse {
 	// Try to extract JSON from response
 	response = extractJSON(response)
-	
+
 	var result analysisResponse
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
 		// Fallback: treat each line as a question
@@ -229,17 +206,22 @@ type finalResponse struct {
 
 func parseFinalResponse(response string) *AssistResult {
 	response = extractJSON(response)
-	
+
 	var parsed finalResponse
 	if err := json.Unmarshal([]byte(response), &parsed); err != nil {
-		return &AssistResult{
-			Title: "",
-			Body:  response,
-			Tags:  nil,
+		// Try to sanitize JSON
+		sanitized := sanitizeJSON(response)
+		if err2 := json.Unmarshal([]byte(sanitized), &parsed); err2 != nil {
+			return &AssistResult{
+				Title: "",
+				Body:  response,
+				Tags:  nil,
+			}
 		}
 	}
 
 	return &AssistResult{
+
 		Title: parsed.Title,
 		Body:  parsed.Body,
 		Tags:  parsed.Tags,
@@ -254,6 +236,37 @@ func extractJSON(s string) string {
 		return s[start : end+1]
 	}
 	return s
+}
+
+func sanitizeJSON(s string) string {
+	var result strings.Builder
+	inString := false
+	escaped := false
+
+	for _, r := range s {
+		if escaped {
+			result.WriteRune(r)
+			escaped = false
+			continue
+		}
+
+		if r == '\\' {
+			result.WriteRune(r)
+			escaped = true
+			continue
+		}
+
+		if r == '"' {
+			inString = !inString
+		}
+
+		if r == '\n' && inString {
+			result.WriteString("\\n")
+		} else {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
 }
 
 func cleanTitle(aiTitle, originalTitle string) string {
@@ -272,36 +285,4 @@ func IsTTY() bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
-}
-
-// QuickCheck does a fast local check for obvious ambiguity markers.
-func QuickCheck(title string) []string {
-	var markers []string
-	
-	// Japanese ambiguity markers
-	jpPatterns := []struct {
-		pattern string
-		meaning string
-	}{
-		{"考慮", "consideration needed"},
-		{"対応", "handling needed"},
-		{"いい感じ", "vague requirement"},
-		{"最適化", "optimization (scope unclear)"},
-		{"場合", "conditional logic"},
-		{"または", "alternatives"},
-	}
-
-	for _, p := range jpPatterns {
-		if strings.Contains(title, p.pattern) {
-			markers = append(markers, p.meaning)
-		}
-	}
-
-	// English patterns
-	enPatterns := regexp.MustCompile(`(?i)\b(consider|handle|optimize|support|if|or|either|both|maybe|somehow)\b`)
-	if enPatterns.MatchString(title) {
-		markers = append(markers, "ambiguous wording")
-	}
-
-	return markers
 }

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -31,28 +30,22 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	database, err := getDB()
+	cc, err := NewCmdContext()
 	if err != nil {
 		return err
 	}
-	defer database.Close()
+	defer cc.Close()
 
-	q := dbgen.New(database)
-	projectID, _, err := getProjectID(q)
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-	task, err := q.GetTask(ctx, dbgen.GetTaskParams{
+	ctx := cc.Context()
+	task, err := cc.Queries.GetTask(ctx, dbgen.GetTaskParams{
 		ID:        id,
-		ProjectID: projectID,
+		ProjectID: cc.ProjectID,
 	})
 	if err != nil {
 		return fmt.Errorf("task #%d not found", id)
 	}
 
-	tags, _ := q.ListTagsForTask(ctx, task.ID)
+	tags, _ := cc.Queries.ListTagsForTask(ctx, task.ID)
 	tagNames := make([]string, len(tags))
 	for i, tag := range tags {
 		tagNames[i] = tag.Name
@@ -72,6 +65,10 @@ func runShow(cmd *cobra.Command, args []string) error {
 		if task.DueAt != nil {
 			s := formatUnix(*task.DueAt)
 			out.DueAt = &s
+		}
+		if task.StartedAt != nil {
+			s := formatUnix(*task.StartedAt)
+			out.StartedAt = &s
 		}
 		if task.DoneAt != nil {
 			s := formatUnix(*task.DoneAt)
@@ -98,6 +95,9 @@ func runShow(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("  Created:  %s\n", formatUnix(task.CreatedAt))
 	fmt.Printf("  Updated:  %s\n", formatUnix(task.UpdatedAt))
+	if task.StartedAt != nil {
+		fmt.Printf("  Started:  %s\n", formatUnix(*task.StartedAt))
+	}
 	if task.DoneAt != nil {
 		fmt.Printf("  Done at:  %s\n", formatUnix(*task.DoneAt))
 	}

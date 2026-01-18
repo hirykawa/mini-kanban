@@ -7,14 +7,16 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Settings } from 'lucide-react';
 
 interface HeaderProps {
   projects: Project[];
   currentProjects: string[];
   onProjectChange: (projects: string[]) => void;
+  onSettingsClick: () => void;
 }
 
-export function Header({ projects, currentProjects, onProjectChange }: HeaderProps) {
+export function Header({ projects, currentProjects, onProjectChange, onSettingsClick }: HeaderProps) {
   const { t } = useTranslation();
   const toggleProject = (projectName: string) => {
     if (currentProjects.includes(projectName)) {
@@ -70,6 +72,14 @@ export function Header({ projects, currentProjects, onProjectChange }: HeaderPro
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onSettingsClick}
+          title="Settings"
+        >
+          <Settings className="h-5 w-5" />
+        </Button>
       </div>
     </header>
   );

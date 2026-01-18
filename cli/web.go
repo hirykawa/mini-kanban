@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -20,18 +21,24 @@ var webCmd = &cobra.Command{
 }
 
 var (
-	webPort int
-	webOpen bool
-	webDev  bool
+	webPort  int
+	webOpen  bool
+	webDev   bool
+	webDebug bool
 )
 
 func init() {
 	webCmd.Flags().IntVar(&webPort, "port", 0, "port to listen on (0 = auto-select from 9000-9999)")
 	webCmd.Flags().BoolVar(&webOpen, "open", false, "open browser after starting")
 	webCmd.Flags().BoolVar(&webDev, "dev", false, "run in development mode (serve static files from web/dist)")
+	webCmd.Flags().BoolVar(&webDebug, "debug", false, "enable debug logging")
 }
 
 func runWeb(cmd *cobra.Command, args []string) error {
+	// Set log level
+	if webDebug {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	}
 	// Find available port
 	port := webPort
 	if port == 0 {

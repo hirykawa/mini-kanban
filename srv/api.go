@@ -1,14 +1,21 @@
 package srv
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/BurntSushi/toml"
+	"mini-kanban/config"
+	"mini-kanban/db"
 	"mini-kanban/db/dbgen"
+	"mini-kanban/util"
 )
 
 // corsMiddleware wraps a handler with CORS headers.
@@ -116,14 +123,21 @@ func (s *Server) handleAPIKanban(w http.ResponseWriter, r *http.Request) {
 	doneTasks := []taskResponse{}
 
 	now := time.Now().Unix()
+
+	// Batch fetch all tags for tasks
+	taskIDs := make([]int64, len(tasks))
+	for i, t := range tasks {
+		taskIDs[i] = t.ID
+	}
+	tagMap, _ := db.GetTagsForTasks(ctx, q, taskIDs)
+
 	for _, t := range tasks {
 		isOverdue := t.DueAt != nil && *t.DueAt < now && t.Status != "done"
 
-		// Get tags for this task
-		tags, _ := q.ListTagsForTask(ctx, t.ID)
-		tagNames := make([]string, len(tags))
-		for i, tag := range tags {
-			tagNames[i] = tag.Name
+		// Get tags for this task from the batch
+		tagNames := tagMap[t.ID]
+		if tagNames == nil {
+			tagNames = []string{}
 		}
 
 		resp := taskResponse{
@@ -168,21 +182,23 @@ func (s *Server) handleAPIKanban(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := struct {
-		Projects       []projectResponse `json:"projects"`
-		CurrentProject string            `json:"currentProject"`
-		TodoTasks      []taskResponse    `json:"todoTasks"`
-		DoingTasks     []taskResponse    `json:"doingTasks"`
-		ReviewTasks    []taskResponse    `json:"reviewTasks"`
-		DoneTasks      []taskResponse    `json:"doneTasks"`
-		Tags           []string          `json:"tags"`
+		Projects        []projectResponse `json:"projects"`
+		CurrentProject  string            `json:"currentProject"`
+		CurrentProjects []string          `json:"currentProjects"`
+		TodoTasks       []taskResponse    `json:"todoTasks"`
+		DoingTasks      []taskResponse    `json:"doingTasks"`
+		ReviewTasks     []taskResponse    `json:"reviewTasks"`
+		DoneTasks       []taskResponse    `json:"doneTasks"`
+		Tags            []string          `json:"tags"`
 	}{
-		Projects:       projectList,
-		CurrentProject: projectName,
-		TodoTasks:      todoTasks,
-		DoingTasks:     doingTasks,
-		ReviewTasks:    reviewTasks,
-		DoneTasks:      doneTasks,
-		Tags:           tagList,
+		Projects:        projectList,
+		CurrentProject:  projectName,
+		CurrentProjects: []string{projectName},
+		TodoTasks:       todoTasks,
+		DoingTasks:      doingTasks,
+		ReviewTasks:     reviewTasks,
+		DoneTasks:       doneTasks,
+		Tags:            tagList,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -220,7 +236,7 @@ func (s *Server) handleAPICreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.DueAt != "" {
-		dueDate, err := parseDateTimeWeb(req.DueAt)
+		dueDate, err := util.ParseDateTime(req.DueAt)
 		if err != nil {
 			http.Error(w, "invalid due_date", http.StatusBadRequest)
 			return
@@ -272,7 +288,7 @@ func (s *Server) handleAPIUpdateTask(w http.ResponseWriter, r *http.Request) {
 		Title   string `json:"title"`
 		Body    string `json:"body"`
 		Status  string `json:"status"`
-		DueDate string `json:"due_date"`
+		DueAt   string `json:"dueAt"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -303,12 +319,12 @@ func (s *Server) handleAPIUpdateTask(w http.ResponseWriter, r *http.Request) {
 	// Update other fields
 	var clearDue interface{} = 0
 	var dueAt *int64
-	if req.DueDate == "" {
+	if req.DueAt == "" {
 		clearDue = 1
 	} else {
-		dueDate, err := parseDateTimeWeb(req.DueDate)
+		dueDate, err := util.ParseDateTime(req.DueAt)
 		if err != nil {
-			http.Error(w, "invalid due_date", http.StatusBadRequest)
+			http.Error(w, "invalid dueAt", http.StatusBadRequest)
 			return
 		}
 		dueUnix := dueDate.Unix()
@@ -406,4 +422,95 @@ func (s *Server) handleAPIUpdateStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(task)
+}
+
+func (s *Server) handleAPIGetConfig(w http.ResponseWriter, r *http.Request) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		slog.Error("get cwd", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	pc, dir, err := config.LoadProjectConfig(cwd)
+	if err != nil {
+		slog.Error("load project config", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	response := struct {
+		ProjectName string `json:"projectName"`
+		Context     string `json:"context"`
+		ContextFile string `json:"contextFile"`
+		ConfigPath  string `json:"configPath"`
+	}{
+		ConfigPath: filepath.Join(dir, ".mini-kanban.toml"),
+	}
+
+	if pc != nil {
+		response.ProjectName = pc.Project.Name
+		response.Context = pc.AI.Context
+		response.ContextFile = pc.AI.ContextFile
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (s *Server) handleAPIUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ProjectName string `json:"projectName"`
+		Context     string `json:"context"`
+		ContextFile string `json:"contextFile"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		slog.Error("get cwd", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	pc, dir, err := config.LoadProjectConfig(cwd)
+	if err != nil {
+		slog.Error("load project config", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	if pc == nil {
+		pc = &config.ProjectConfig{}
+	}
+
+	// Update values
+	if req.ProjectName != "" {
+		pc.Project.Name = req.ProjectName
+	}
+	pc.AI.Context = req.Context
+	pc.AI.ContextFile = req.ContextFile
+
+	// Generate TOML content
+	var buf bytes.Buffer
+	encoder := toml.NewEncoder(&buf)
+	if err := encoder.Encode(pc); err != nil {
+		slog.Error("encode toml", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Write to file
+	configPath := filepath.Join(dir, ".mini-kanban.toml")
+	if err := os.WriteFile(configPath, buf.Bytes(), 0644); err != nil {
+		slog.Error("write config", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
