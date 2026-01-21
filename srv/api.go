@@ -407,6 +407,15 @@ func (s *Server) handleAPIUpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	oldTask, err := q.GetTask(ctx, dbgen.GetTaskParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
+	oldStatus := ""
+	if err == nil {
+		oldStatus = oldTask.Status
+	}
+
 	task, err := q.UpdateTaskStatus(ctx, dbgen.UpdateTaskStatusParams{
 		ID:        id,
 		ProjectID: projectID,
@@ -419,6 +428,16 @@ func (s *Server) handleAPIUpdateStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.broadcast("reload")
+
+	if oldStatus != req.Status && (req.Status == "review" || req.Status == "done") {
+		s.broadcastNotification(SSENotification{
+			Type:      "status_change",
+			TaskID:    id,
+			TaskTitle: task.Title,
+			NewStatus: req.Status,
+			OldStatus: oldStatus,
+		})
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(task)

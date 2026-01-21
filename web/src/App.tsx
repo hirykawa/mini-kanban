@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTasks } from '@/hooks/useTasks';
-import { useSSE } from '@/hooks/useSSE';
+import { useSSE, type SSENotification } from '@/hooks/useSSE';
+import { useNotification } from '@/hooks/useNotification';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Header } from '@/components/Header';
 import { KanbanBoard } from '@/components/KanbanBoard';
@@ -23,8 +24,61 @@ function App() {
     switchProjects,
   } = useTasks();
 
-  // Listen for SSE updates
-  useSSE(refresh);
+  const { permission, requestPermission, showNotification, isSupported } = useNotification();
+  const notifiedOverdueRef = useRef<Set<number>>(new Set());
+
+  const handleNotification = useCallback((notification: SSENotification) => {
+    if (notification.type === 'status_change') {
+      if (notification.newStatus === 'review') {
+        showNotification(t('notificationStatusReview'), {
+          body: t('notificationBody', { title: notification.taskTitle }),
+          icon: '/favicon.ico',
+        });
+      } else if (notification.newStatus === 'done') {
+        showNotification(t('notificationStatusDone'), {
+          body: t('notificationBody', { title: notification.taskTitle }),
+          icon: '/favicon.ico',
+        });
+      }
+    } else if (notification.type === 'overdue') {
+      showNotification(t('notificationOverdue'), {
+        body: t('notificationBody', { title: notification.taskTitle }),
+        icon: '/favicon.ico',
+      });
+    }
+  }, [showNotification, t]);
+
+  useSSE(refresh, handleNotification);
+
+  useEffect(() => {
+    if (!data) return;
+
+    const checkOverdue = () => {
+      const now = Date.now() / 1000;
+      const allTasks = [...data.todoTasks, ...data.doingTasks, ...data.reviewTasks];
+      
+      for (const task of allTasks) {
+        if (task.dueAt && task.dueAt < now && !notifiedOverdueRef.current.has(task.id)) {
+          notifiedOverdueRef.current.add(task.id);
+          showNotification(t('notificationOverdue'), {
+            body: t('notificationBody', { title: task.title }),
+            icon: '/favicon.ico',
+          });
+        }
+      }
+    };
+
+    checkOverdue();
+    const interval = setInterval(checkOverdue, 60000);
+
+    return () => clearInterval(interval);
+  }, [data, showNotification, t]);
+
+  useEffect(() => {
+    if (isSupported && permission === 'default') {
+      requestPermission();
+    }
+  }, [isSupported, permission, requestPermission]);
 
   if (loading && !data) {
     return (

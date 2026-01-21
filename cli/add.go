@@ -61,14 +61,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		dueAt = &unix
 	}
 
-	// Handle AI assist
-	shouldAI := addAI
-	if !addNoAI && !shouldAI {
-		_, cfg, err := getAIProvider()
-		if err == nil && strings.ToLower(cfg.AI.Mode) == "auto" {
-			shouldAI = true
-		}
-	}
+	shouldAI := addAI && !addNoAI
 
 	if shouldAI && !addNoAI {
 		provider, cfg, err := getAIProvider()
@@ -103,7 +96,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		ProjectID: cc.ProjectID,
 		Title:     title,
 		Body:      addBody,
-		Status:    "open",
+		Status:    "todo",
 		DueAt:     dueAt,
 	})
 	if err != nil {

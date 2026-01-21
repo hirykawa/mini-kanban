@@ -25,11 +25,13 @@ export function TaskForm({ project, projects, availableTags = [], onSubmit }: Ta
   const [title, setTitle] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [due, setDue] = useState('today');
+  const [customDue, setCustomDue] = useState('');
   const [selectedProject, setSelectedProject] = useState(project);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [pendingTitle, setPendingTitle] = useState('');
   const [initialQuestions, setInitialQuestions] = useState<AIAssistResponse | null>(null);
   const [enableAI, setEnableAI] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const getDueDate = (preset: string): string => {
     const now = new Date();
@@ -57,6 +59,14 @@ export function TaskForm({ project, projects, availableTags = [], onSubmit }: Ta
         const endOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0);
         return endOfNextMonth.toISOString().split('T')[0];
       }
+      case '30m':
+        return '30m';
+      case '1h':
+        return '1h';
+      case '2h':
+        return '2h';
+      case 'custom':
+        return customDue.trim() || '';
       default:
         return '';
     }
@@ -67,41 +77,33 @@ export function TaskForm({ project, projects, availableTags = [], onSubmit }: Ta
     if (!title.trim()) return;
 
     const trimmedTitle = title.trim();
-    console.log('[TaskForm] handleSubmit', { trimmedTitle, enableAI });
 
-    // If AI is enabled, check if AI should assist before opening dialog
     if (enableAI) {
       setPendingTitle(trimmedTitle);
+      setIsLoading(true);
       try {
         const targetProject = projects ? selectedProject : project;
-        console.log('[TaskForm] calling aiAssist API...');
         const response = await aiAssist({
           title: trimmedTitle,
           project: targetProject,
           existingTags: availableTags,
         });
-        console.log('[TaskForm] aiAssist response:', response);
         
-        // If AI says skip, submit directly without dialog
         if (response.phase === 'skip' || !response.questions || response.questions.length === 0) {
-          console.log('[TaskForm] skipping dialog, submitting directly');
           submitTask(trimmedTitle, tags, undefined);
           return;
         }
         
-        // Has questions, open dialog with pre-fetched data
-        console.log('[TaskForm] opening dialog with questions:', response.questions);
         setInitialQuestions(response);
         setAiDialogOpen(true);
-      } catch (err) {
-        console.log('[TaskForm] aiAssist error:', err);
-        // On error, submit directly
+      } catch {
         submitTask(trimmedTitle, tags, undefined);
+      } finally {
+        setIsLoading(false);
       }
       return;
     }
 
-    // No AI assist, submit directly
     submitTask(trimmedTitle, tags, undefined);
   };
 
@@ -116,14 +118,12 @@ export function TaskForm({ project, projects, availableTags = [], onSubmit }: Ta
   };
 
   const handleAIConfirm = (result: { title: string; body: string; tags: string[] }) => {
-    // Merge AI suggested tags with any user-entered tags
     const mergedTags = [...new Set([...tags, ...result.tags])];
     submitTask(result.title, mergedTags, result.body);
     setAiDialogOpen(false);
   };
 
   const handleAISkip = () => {
-    // Use original title without AI assist
     if (pendingTitle) {
       submitTask(pendingTitle, tags, undefined);
     }
@@ -153,13 +153,25 @@ export function TaskForm({ project, projects, availableTags = [], onSubmit }: Ta
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">{t('noDueDate')}</SelectItem>
+            <SelectItem value="30m">{t('inThirtyMinutes')}</SelectItem>
+            <SelectItem value="1h">{t('inOneHour')}</SelectItem>
+            <SelectItem value="2h">{t('inTwoHours')}</SelectItem>
             <SelectItem value="today">{t('today')}</SelectItem>
             <SelectItem value="tomorrow">{t('tomorrow')}</SelectItem>
             <SelectItem value="this-week">{t('thisWeek')}</SelectItem>
             <SelectItem value="this-month">{t('thisMonth')}</SelectItem>
             <SelectItem value="next-month">{t('nextMonth')}</SelectItem>
+            <SelectItem value="custom">{t('customRelative')}</SelectItem>
           </SelectContent>
         </Select>
+        {due === 'custom' && (
+          <Input
+            value={customDue}
+            onChange={(e) => setCustomDue(e.target.value)}
+            placeholder="2h, 30m, 1h30m..."
+            className="w-[120px]"
+          />
+        )}
         {projects && projects.length > 1 && (
           <Select value={selectedProject} onValueChange={setSelectedProject}>
             <SelectTrigger className="w-[140px]">
@@ -181,8 +193,15 @@ export function TaskForm({ project, projects, availableTags = [], onSubmit }: Ta
           />
           <span className="text-sm">{t('enableAIAssist')}</span>
         </label>
-        <Button type="submit">
-          {t('addTask')}
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></span>
+              {t('processing')}
+            </>
+          ) : (
+            t('addTask')
+          )}
         </Button>
       </form>
 
