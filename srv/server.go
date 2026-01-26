@@ -3,6 +3,7 @@ package srv
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -54,6 +55,8 @@ func (s *Server) Serve(addr string) error {
 	mux.HandleFunc("PUT /api/config", corsMiddleware(s.handleAPIUpdateConfig))
 	mux.HandleFunc("OPTIONS /api/config", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
 	mux.HandleFunc("GET /api/projects", corsMiddleware(s.handleAPIProjects))
+	mux.HandleFunc("POST /api/projects", corsMiddleware(s.handleAPICreateProject))
+	mux.HandleFunc("OPTIONS /api/projects", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
 	mux.HandleFunc("GET /api/kanban", corsMiddleware(s.handleAPIKanban))
 	mux.HandleFunc("POST /api/tasks", corsMiddleware(s.handleAPICreateTask))
 	mux.HandleFunc("PUT /api/tasks/{id}", corsMiddleware(s.handleAPIUpdateTask))
@@ -146,6 +149,32 @@ func (s *Server) broadcast(msg string) {
 			// Client channel full, skip
 		}
 	}
+}
+
+type SSENotification struct {
+	Type      string `json:"type"`
+	TaskID    int64  `json:"taskId"`
+	TaskTitle string `json:"taskTitle"`
+	NewStatus string `json:"newStatus,omitempty"`
+	OldStatus string `json:"oldStatus,omitempty"`
+}
+
+type SSEMessage struct {
+	Action       string           `json:"action"`
+	Notification *SSENotification `json:"notification,omitempty"`
+}
+
+func (s *Server) broadcastNotification(notification SSENotification) {
+	msg := SSEMessage{
+		Action:       "notify",
+		Notification: &notification,
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		slog.Error("marshal notification", "error", err)
+		return
+	}
+	s.broadcast(string(data))
 }
 
 func (s *Server) handleNotify(w http.ResponseWriter, r *http.Request) {

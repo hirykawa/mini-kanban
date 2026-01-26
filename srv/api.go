@@ -49,6 +49,42 @@ func (s *Server) handleAPIProjects(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(projects)
 }
 
+func (s *Server) handleAPICreateProject(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := dbgen.New(s.DB)
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	if req.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := q.GetProjectByName(ctx, req.Name); err == nil {
+		http.Error(w, "project already exists", http.StatusConflict)
+		return
+	}
+
+	project, err := q.CreateProject(ctx, req.Name)
+	if err != nil {
+		slog.Error("create project", "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	s.broadcast("reload")
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(project)
+}
+
 func (s *Server) getProjectID(ctx context.Context, projectName string) (int64, error) {
 	q := dbgen.New(s.DB)
 
@@ -407,6 +443,15 @@ func (s *Server) handleAPIUpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	oldTask, err := q.GetTask(ctx, dbgen.GetTaskParams{
+		ID:        id,
+		ProjectID: projectID,
+	})
+	oldStatus := ""
+	if err == nil {
+		oldStatus = oldTask.Status
+	}
+
 	task, err := q.UpdateTaskStatus(ctx, dbgen.UpdateTaskStatusParams{
 		ID:        id,
 		ProjectID: projectID,
@@ -419,6 +464,16 @@ func (s *Server) handleAPIUpdateStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.broadcast("reload")
+
+	if oldStatus != req.Status && (req.Status == "review" || req.Status == "done") {
+		s.broadcastNotification(SSENotification{
+			Type:      "status_change",
+			TaskID:    id,
+			TaskTitle: task.Title,
+			NewStatus: req.Status,
+			OldStatus: oldStatus,
+		})
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(task)

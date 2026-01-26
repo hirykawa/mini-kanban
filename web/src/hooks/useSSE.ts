@@ -1,11 +1,26 @@
 import { useEffect, useCallback, useRef } from 'react';
 
-export function useSSE(onMessage: () => void) {
+export interface SSENotification {
+  type: 'status_change' | 'overdue';
+  taskId: number;
+  taskTitle: string;
+  newStatus?: string;
+  oldStatus?: string;
+}
+
+export interface SSEMessage {
+  action: 'reload' | 'notify';
+  notification?: SSENotification;
+}
+
+export function useSSE(onReload: () => void, onNotification?: (notification: SSENotification) => void) {
   const eventSourceRef = useRef<EventSource | null>(null);
-  const onMessageRef = useRef(onMessage);
+  const onReloadRef = useRef(onReload);
+  const onNotificationRef = useRef(onNotification);
 
   // Keep the callback ref updated
-  onMessageRef.current = onMessage;
+  onReloadRef.current = onReload;
+  onNotificationRef.current = onNotification;
 
   const connect = useCallback(() => {
     if (eventSourceRef.current) {
@@ -16,8 +31,26 @@ export function useSSE(onMessage: () => void) {
     eventSourceRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
+      // Handle legacy reload message
       if (event.data === 'reload') {
-        onMessageRef.current();
+        onReloadRef.current();
+        return;
+      }
+
+      // Try to parse JSON message
+      try {
+        const msg: SSEMessage = JSON.parse(event.data);
+        if (msg.action === 'reload') {
+          onReloadRef.current();
+        }
+        if (msg.action === 'notify' && msg.notification && onNotificationRef.current) {
+          onNotificationRef.current(msg.notification);
+        }
+      } catch {
+        // Ignore parse errors for non-JSON messages
+        if (event.data !== 'connected') {
+          console.log('Unknown SSE message:', event.data);
+        }
       }
     };
 

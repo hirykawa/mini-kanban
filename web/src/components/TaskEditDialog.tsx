@@ -33,19 +33,27 @@ export function TaskEditDialog({ task, project, availableTags = [], open, onOpen
   const [dueAt, setDueAt] = useState(() => {
     if (!task.dueAt) return '';
     const date = new Date(task.dueAt * 1000);
-    return date.toISOString().split('T')[0];
+    // Format as YYYY-MM-DDTHH:mm for datetime-local input
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   });
   const [isPreview, setIsPreview] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [pendingTitle, setPendingTitle] = useState('');
   const [initialQuestions, setInitialQuestions] = useState<AIAssistResponse | null>(null);
+  const [isAILoading, setIsAILoading] = useState(false);
 
   const handleSave = () => {
+    const finalDue = dueAt || 'none';
     onSave(task.id, {
       title: title !== task.title ? title : undefined,
       body: body !== (task.body || '') ? body : undefined,
       tags: tags,
-      dueAt: dueAt || 'none',
+      dueAt: finalDue,
     });
     onOpenChange(false);
   };
@@ -54,6 +62,7 @@ export function TaskEditDialog({ task, project, availableTags = [], open, onOpen
     if (!title.trim()) return;
     const trimmedTitle = title.trim();
     setPendingTitle(trimmedTitle);
+    setIsAILoading(true);
     
     try {
       const response = await aiAssist({
@@ -72,6 +81,8 @@ export function TaskEditDialog({ task, project, availableTags = [], open, onOpen
       setAiDialogOpen(true);
     } catch {
       // On error, do nothing
+    } finally {
+      setIsAILoading(false);
     }
   };
 
@@ -102,9 +113,17 @@ export function TaskEditDialog({ task, project, availableTags = [], open, onOpen
                 variant="ghost" 
                 size="sm" 
                 onClick={handleAIAssist}
+                disabled={isAILoading}
                 className="h-6 text-xs"
               >
-                🤖 {t('enableAIAssist')}
+                {isAILoading ? (
+                  <>
+                    <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-current"></span>
+                    {t('processing')}
+                  </>
+                ) : (
+                  <>🤖 {t('enableAIAssist')}</>
+                )}
               </Button>
             </div>
             <Input
@@ -176,7 +195,7 @@ export function TaskEditDialog({ task, project, availableTags = [], open, onOpen
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('dueDate')}</label>
               <Input
-                type="date"
+                type="datetime-local"
                 value={dueAt}
                 onChange={(e) => setDueAt(e.target.value)}
               />

@@ -40,26 +40,20 @@ export function AIAssistDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('[AIAssistDialog] useEffect triggered', { open, title, initialQuestions });
     if (open && title) {
-      // If we have pre-fetched questions, use them directly
       if (initialQuestions && initialQuestions.questions && initialQuestions.questions.length > 0) {
-        console.log('[AIAssistDialog] using pre-fetched questions:', initialQuestions.questions);
         setQuestions(initialQuestions.questions);
         setAnswers(new Array(initialQuestions.questions.length).fill(''));
         setPhase('questions');
         setError(null);
         setResult(null);
       } else {
-        // Fallback: fetch questions (shouldn't happen with new flow)
-        console.log('[AIAssistDialog] no initialQuestions, calling fetchQuestions()');
         fetchQuestions();
       }
     }
   }, [open, title, initialQuestions]);
 
   const fetchQuestions = async () => {
-    console.log('[AIAssistDialog] fetchQuestions called');
     setPhase('loading');
     setError(null);
     setQuestions([]);
@@ -72,25 +66,18 @@ export function AIAssistDialog({
         project,
         existingTags,
       });
-      console.log('[AIAssistDialog] fetchQuestions response:', response);
 
       if (response.phase === 'skip') {
-        // AI is disabled or title doesn't need assist - skip silently without opening dialog
-        console.log('[AIAssistDialog] phase=skip, calling onSkip');
         onSkip();
         onOpenChange(false);
       } else if (response.questions && response.questions.length > 0) {
-        console.log('[AIAssistDialog] setting questions:', response.questions);
         setQuestions(response.questions);
         setAnswers(new Array(response.questions.length).fill(''));
         setPhase('questions');
       } else {
-        // No questions available, skip
-        console.log('[AIAssistDialog] no questions, calling onSkip');
         onSkip();
       }
     } catch (err) {
-      console.log('[AIAssistDialog] fetchQuestions error:', err);
       setError(t('aiAssistError'));
       setPhase('questions');
     }
@@ -150,7 +137,7 @@ export function AIAssistDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[700px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>🤖</span>
