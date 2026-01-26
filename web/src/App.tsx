@@ -108,6 +108,7 @@ function App() {
           currentProjects={currentProjects}
           onProjectChange={switchProjects}
           onSettingsClick={() => setConfigOpen(true)}
+          onProjectCreated={refresh}
         />
         <main>
           <KanbanBoard

@@ -82,4 +82,9 @@ export const ja = {
   doneFilterThisWeek: '今週',
   doneFilterThisMonth: '今月',
   filters: 'フィルター',
+  // Project Management
+  newProject: '新規プロジェクト',
+  projectNamePlaceholder: 'プロジェクト名',
+  createProject: '作成',
+  projectExists: 'プロジェクトは既に存在します',
 };

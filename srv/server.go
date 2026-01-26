@@ -55,6 +55,8 @@ func (s *Server) Serve(addr string) error {
 	mux.HandleFunc("PUT /api/config", corsMiddleware(s.handleAPIUpdateConfig))
 	mux.HandleFunc("OPTIONS /api/config", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
 	mux.HandleFunc("GET /api/projects", corsMiddleware(s.handleAPIProjects))
+	mux.HandleFunc("POST /api/projects", corsMiddleware(s.handleAPICreateProject))
+	mux.HandleFunc("OPTIONS /api/projects", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {}))
 	mux.HandleFunc("GET /api/kanban", corsMiddleware(s.handleAPIKanban))
 	mux.HandleFunc("POST /api/tasks", corsMiddleware(s.handleAPICreateTask))
 	mux.HandleFunc("PUT /api/tasks/{id}", corsMiddleware(s.handleAPIUpdateTask))

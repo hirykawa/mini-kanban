@@ -82,4 +82,9 @@ export const en = {
   doneFilterThisWeek: 'This week',
   doneFilterThisMonth: 'This month',
   filters: 'Filters',
+  // Project Management
+  newProject: 'New Project',
+  projectNamePlaceholder: 'Project name',
+  createProject: 'Create',
+  projectExists: 'Project already exists',
 };
